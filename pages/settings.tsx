@@ -3,6 +3,7 @@ import Head from "next/head";
 import Link from "next/link";
 import { GetServerSideProps } from "next";
 import { getHospitalName } from "../lib/db";
+import { getNhsoConfigStatus, NhsoConfigItem } from "../lib/nhso";
 import Logo from "../components/Logo";
 
 type Config = {
@@ -16,8 +17,11 @@ type Config = {
 
 export const getServerSideProps: GetServerSideProps = async () => {
   const hospitalName = await getHospitalName();
-  return { props: { hospitalName } };
+  const nhsoStatus = getNhsoConfigStatus();
+  return { props: { hospitalName, nhsoStatus } };
 };
+
+type NhsoStatus = { env: string; items: NhsoConfigItem[]; ready: boolean };
 
 function validateConfig(config: Config): string | null {
   if (!config.host.trim()) return "กรุณาระบุ Host";
@@ -27,7 +31,7 @@ function validateConfig(config: Config): string | null {
   return null;
 }
 
-export default function Settings({ hospitalName }: { hospitalName: string }) {
+export default function Settings({ hospitalName, nhsoStatus }: { hospitalName: string; nhsoStatus: NhsoStatus }) {
   const [config, setConfig] = useState<Config>({
     host: "localhost",
     port: 3306,
@@ -195,6 +199,33 @@ export default function Settings({ hospitalName }: { hospitalName: string }) {
                   {testingConnection ? "กำลังทดสอบ..." : "Test Connection"}
                 </button>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section style={{ marginTop: 32 }}>
+          <div className="section-header">
+            <h2 className="section-title" style={{ margin: 0 }}>
+              การเชื่อมต่อ NHSO Digital Platform API
+            </h2>
+            <span className={`status-pill ${nhsoStatus.ready ? "status-y" : "status-n"}`}>
+              {nhsoStatus.ready ? "ตั้งค่าครบแล้ว" : "ตั้งค่ายังไม่ครบ"}
+            </span>
+          </div>
+          <div className="add-item-card" style={{ maxWidth: 560 }}>
+            <p style={{ marginTop: 0, color: "var(--muted)" }}>
+              โหมด: <strong>{nhsoStatus.env}</strong> — ตั้งค่าผ่านไฟล์ <code>.env.local</code> เท่านั้น
+              (ไม่สามารถกรอก/บันทึกผ่านหน้านี้ได้ เพื่อป้องกันข้อมูลลับหลุด)
+            </p>
+            <div className="grid-form">
+              {nhsoStatus.items.map((item) => (
+                <div key={item.key} className="toolbar" style={{ justifyContent: "space-between" }}>
+                  <span>{item.label}</span>
+                  <span className={`status-pill ${item.set ? "status-y" : item.required ? "status-n" : "status-pending"}`}>
+                    {item.set ? "ตั้งค่าแล้ว" : item.required ? "ยังไม่ได้ตั้งค่า" : "ไม่ได้ตั้งค่า (optional)"}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </section>

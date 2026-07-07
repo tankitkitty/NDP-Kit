@@ -131,6 +131,25 @@ export type NhsoStatusResult = {
   statements?: NhsoStatement[];
 };
 
+export type NhsoConfigItem = { key: string; label: string; set: boolean; required: boolean };
+
+export function getNhsoConfigStatus(): { env: string; items: NhsoConfigItem[]; ready: boolean } {
+  const hasPublicKey = Boolean(process.env.NHSO_PUBLIC_KEY || process.env.NHSO_PUBLIC_KEY_PATH);
+  const items: NhsoConfigItem[] = [
+    { key: "NHSO_CLIENT_ID", label: "รหัสสถานพยาบาล (Client ID)", set: Boolean(process.env.NHSO_CLIENT_ID), required: true },
+    { key: "NHSO_CLIENT_SECRET", label: "Client Secret", set: Boolean(process.env.NHSO_CLIENT_SECRET), required: true },
+    { key: "NHSO_SOURCE_ID", label: "Source ID", set: Boolean(process.env.NHSO_SOURCE_ID), required: true },
+    { key: "NHSO_SOURCE_ID_KEY", label: "Source ID Key", set: Boolean(process.env.NHSO_SOURCE_ID_KEY), required: true },
+    { key: "NHSO_PUBLIC_KEY", label: "Public Key (NHSO_PUBLIC_KEY หรือ NHSO_PUBLIC_KEY_PATH)", set: hasPublicKey, required: true },
+    { key: "NHSO_FDH_KEY", label: "FDH Key (optional)", set: Boolean(process.env.NHSO_FDH_KEY), required: false },
+  ];
+  return {
+    env: (process.env.NHSO_ENV || "uat").toLowerCase(),
+    items,
+    ready: items.filter((item) => item.required).every((item) => item.set),
+  };
+}
+
 export async function getStatusTrackDetails(uids: string[]): Promise<NhsoStatusResult[]> {
   if (uids.length === 0) return [];
   const token = await signOn();
