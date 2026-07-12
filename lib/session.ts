@@ -1,15 +1,40 @@
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 
 export const SESSION_COOKIE_NAME = "session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 8;
 
+const secretFilePath = path.join(process.cwd(), "data", ".session-secret");
+let cachedSecret: string | null = null;
+
 function getSecret(): string {
-  const secret = process.env.SESSION_SECRET;
-  if (secret) return secret;
-  if (process.env.NODE_ENV !== "production") {
-    return "dev-only-insecure-session-secret";
+  // ใช้ค่าจาก environment ก่อนเสมอ (แนะนำสำหรับ production หลายเครื่อง)
+  if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
+  if (cachedSecret) return cachedSecret;
+
+  // ถ้าไม่ได้ตั้ง env ให้สร้าง secret สุ่มเฉพาะเครื่องแล้วเก็บลงไฟล์
+  // (gitignored) เพื่อให้ cookie ยังใช้ได้ข้ามการรีสตาร์ท และทุกการติดตั้ง
+  // ได้ key ที่เดาไม่ได้โดยไม่ต้องตั้งค่าเอง — ไม่มีค่าตายตัวที่รู้กันทั่วไปอีกต่อไป
+  try {
+    if (fs.existsSync(secretFilePath)) {
+      const stored = fs.readFileSync(secretFilePath, "utf-8").trim();
+      if (stored) {
+        cachedSecret = stored;
+        return cachedSecret;
+      }
+    }
+    const generated = crypto.randomBytes(48).toString("hex");
+    fs.mkdirSync(path.dirname(secretFilePath), { recursive: true });
+    fs.writeFileSync(secretFilePath, generated, { encoding: "utf-8", mode: 0o600 });
+    cachedSecret = generated;
+    return cachedSecret;
+  } catch {
+    // กรณีสุดท้าย (เช่น ระบบไฟล์อ่านอย่างเดียว): สุ่ม secret ไว้ในหน่วยความจำ
+    // cookie จะหมดอายุเมื่อรีสตาร์ท แต่ค่าไม่เคยเป็นค่าคงที่ที่เดาได้
+    cachedSecret = crypto.randomBytes(48).toString("hex");
+    return cachedSecret;
   }
-  throw new Error("SESSION_SECRET is not set");
 }
 
 function sign(payload: string): string {

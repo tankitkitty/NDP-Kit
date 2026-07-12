@@ -80,6 +80,16 @@ function getPool() {
       connectionLimit: 10,
       queueLimit: 0,
     });
+    // Some MySQL/MariaDB servers (seen on this project's DB: MariaDB 10.0.17)
+    // default the session charset to something other than UTF-8 (e.g. tis620)
+    // regardless of the driver's `charset` connection option, which corrupts
+    // Thai text on insert/select. Force it explicitly on every new connection.
+    pool.on("connection", (connection) => {
+      // The pool's raw "connection" event always fires with the callback-style
+      // connection object at runtime (even though mysql2/promise's types claim
+      // otherwise), so this call is fire-and-forget rather than awaited.
+      connection.query("SET NAMES utf8mb4");
+    });
     lastConfigJson = currentConfigJson;
   }
 
@@ -108,6 +118,30 @@ export async function initializeDatabase() {
       name VARCHAR(255) NOT NULL,
       description TEXT NULL,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
+}
+
+export async function ensureEligibilityCheckTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS eligibility_check (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      vn VARCHAR(20) NULL,
+      hn VARCHAR(20) NULL,
+      cid VARCHAR(17) NULL,
+      patient_name VARCHAR(200) NULL,
+      visit_date DATE NULL,
+      status ENUM('success','error') NOT NULL,
+      claim_type VARCHAR(50) NULL,
+      claim_code VARCHAR(100) NULL,
+      result_hcode VARCHAR(20) NULL,
+      claim_date_time VARCHAR(30) NULL,
+      check_date VARCHAR(30) NULL,
+      error_message TEXT NULL,
+      checked_by VARCHAR(100) NULL,
+      checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_checked_at (checked_at),
+      INDEX idx_visit (vn)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
 }

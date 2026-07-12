@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { GetServerSideProps } from "next";
 import { getSession } from "../lib/session";
 import { getCurrentMonthRange } from "../lib/date";
 import { getHospitalName } from "../lib/db";
-import Logo from "../components/Logo";
+import Layout from "../components/Layout";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const STATUS_VALUES: Status[] = ["N", "Y", "C", "null", "all"];
@@ -352,29 +351,10 @@ export default function EclaimFeeSchedule({ loginname, hospitalName }: { loginna
   const isError = message ? /ไม่สามารถ|ผิดพลาด/.test(message) : false;
 
   return (
-    <div className="container" style={{ maxWidth: "100%", width: "100%" }}>
-      <Head>
-        <title>ตรวจสอบ eClaim Fee Schedule - 13File Tools</title>
-      </Head>
+    <Layout title="ตรวจสอบ eClaim Fee Schedule" loginname={loginname} hospitalName={hospitalName} fullWidth>
       <div className="page-card">
-        <div className="toolbar" style={{ justifyContent: "space-between", marginBottom: 24 }}>
-          <Link href="/">&larr; กลับหน้าหลัก</Link>
-          <div className="toolbar">
-            {hospitalName ? (
-              <span className="user-pill">
-                <span aria-hidden="true">🏥</span>
-                {hospitalName}
-              </span>
-            ) : null}
-            <span className="user-pill">
-              <span className="user-avatar">{loginname.charAt(0).toUpperCase()}</span>
-              {loginname}
-            </span>
-          </div>
-        </div>
         <div className="brand" style={{ marginBottom: 8 }}>
-          <Logo size={44} />
-          <h1 className="page-title" style={{ marginBottom: 0, fontSize: "2rem" }}>
+          <h1 className="page-title" style={{ marginBottom: 0 }}>
             ตรวจสอบและแก้ไขข้อมูล eClaim Fee Schedule
           </h1>
         </div>
@@ -623,6 +603,6 @@ export default function EclaimFeeSchedule({ loginname, hospitalName }: { loginna
           </div>
         </div>
       ) : null}
-    </div>
+    </Layout>
   );
 }

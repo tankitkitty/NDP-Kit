@@ -1,6 +1,7 @@
 node_modules
 .next
 out
+tsconfig.tsbuildinfo
 .DS_Store
 .env.local
 .env
@@ -8,3 +9,5 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 data/dbconfig.json
+data/dbconfig43.json
+data/.session-secret

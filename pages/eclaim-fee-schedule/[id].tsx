@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import Head from "next/head";
 import Link from "next/link";
 import { GetServerSideProps } from "next";
 import { getSession } from "../../lib/session";
 import { getHospitalName } from "../../lib/db";
-import Logo from "../../components/Logo";
+import Layout from "../../components/Layout";
 
 type EclaimRow = Record<string, any>;
 
@@ -127,29 +126,13 @@ export default function EclaimFeeScheduleEdit({ loginname, hospitalName }: { log
   const isError = message ? /ไม่สามารถ|ผิดพลาด/.test(message) : false;
 
   return (
-    <div className="container">
-      <Head>
-        <title>แก้ไข eClaim Fee Schedule - 13File Tools</title>
-      </Head>
+    <Layout title={`แก้ไข eClaim Fee Schedule #${id}`} loginname={loginname} hospitalName={hospitalName}>
       <div className="page-card">
         <div className="toolbar" style={{ justifyContent: "space-between", marginBottom: 24 }}>
           <Link href="/eclaim-fee-schedule">&larr; กลับไปรายการ</Link>
-          <div className="toolbar">
-            {hospitalName ? (
-              <span className="user-pill">
-                <span aria-hidden="true">🏥</span>
-                {hospitalName}
-              </span>
-            ) : null}
-            <span className="user-pill">
-              <span className="user-avatar">{loginname.charAt(0).toUpperCase()}</span>
-              {loginname}
-            </span>
-          </div>
         </div>
         <div className="brand" style={{ marginBottom: 24 }}>
-          <Logo size={44} />
-          <h1 className="page-title" style={{ marginBottom: 0, fontSize: "2rem" }}>
+          <h1 className="page-title" style={{ marginBottom: 0 }}>
             แก้ไขข้อมูล eClaim Fee Schedule #{id}
           </h1>
         </div>
@@ -248,6 +231,6 @@ export default function EclaimFeeScheduleEdit({ loginname, hospitalName }: { log
           </>
         )}
       </div>
-    </div>
+    </Layout>
   );
 }

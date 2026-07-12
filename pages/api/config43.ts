@@ -1,10 +1,10 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import fs from "fs/promises";
 import path from "path";
-import { parseDbConfig, readStoredConfig } from "../../lib/db";
+import { parseDbConfig43, readStoredConfig43 } from "../../lib/db43";
 import { isConfigAccessAllowed } from "../../lib/authGuard";
 
-const configPath = path.join(process.cwd(), "data", "dbconfig.json");
+const configPath = path.join(process.cwd(), "data", "dbconfig43.json");
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!isConfigAccessAllowed(req)) {
@@ -18,20 +18,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { password, ...rest } = config;
       return res.status(200).json({ config: { ...rest, hasPassword: Boolean(password) } });
     } catch (error) {
-      return res.status(500).json({ error: "ไม่สามารถอ่านการตั้งค่าได้" });
+      return res.status(200).json({ config: null });
     }
   }
 
   if (req.method === "POST") {
     let config;
     try {
-      config = parseDbConfig(req.body);
+      config = parseDbConfig43(req.body);
     } catch (error: any) {
       return res.status(400).json({ error: error?.message || "ข้อมูลการตั้งค่าไม่ถูกต้อง" });
     }
 
     if (!config.password) {
-      const stored = readStoredConfig();
+      const stored = readStoredConfig43();
       if (stored?.password) {
         config.password = stored.password;
       }
@@ -39,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
       await fs.writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
-      return res.status(200).json({ message: "บันทึกการตั้งค่าฐานข้อมูลสำเร็จ" });
+      return res.status(200).json({ message: "บันทึกการตั้งค่าฐานข้อมูล 43 แฟ้มสำเร็จ" });
     } catch (error) {
       return res.status(500).json({ error: "ไม่สามารถบันทึกการตั้งค่าได้" });
     }
