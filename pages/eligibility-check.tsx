@@ -47,6 +47,15 @@ function formatDateTime(value: string): string {
   return d.toLocaleString("th-TH", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// เว้นระยะการตรวจสอบสิทธิสดอย่างน้อย 5 วินาที/รายการ ตามข้อกำหนด
+const VERIFY_INTERVAL_MS = 5000;
+
+type VerifyState = { state: "checking" | "ok" | "fail"; message: string };
+
 export default function EligibilityCheck({ loginname, hospitalName }: { loginname: string; hospitalName: string }) {
   const [fromDraft, setFromDraft] = useState(DEFAULT_RANGE.start);
   const [toDraft, setToDraft] = useState(DEFAULT_RANGE.end);
@@ -85,6 +94,12 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
   const [editLoading, setEditLoading] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
 
+  // ตรวจสอบสิทธิสด (online ด้วย token) — เลือกเป็นรายคน ยังไม่บันทึกลง HOSxP
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [verifyResult, setVerifyResult] = useState<Record<string, VerifyState>>({});
+  const [verifying, setVerifying] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
   async function fetchVisits() {
     if (!fromDraft || !toDraft) return;
     setLoading(true);
@@ -96,6 +111,8 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
       const data = await res.json();
       if (res.ok) {
         setRows(data.rows || []);
+        setSelected(new Set());
+        setVerifyResult({});
         setHasSearched(true);
         if (data.truncated) {
           setIsError(false);
@@ -193,6 +210,73 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
     }
   }
 
+  function toggleSelect(vn: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(vn)) next.delete(vn);
+      else next.add(vn);
+      return next;
+    });
+  }
+
+  function toggleSelectAll(list: Visit[]) {
+    setSelected((prev) => {
+      const allSelected = list.length > 0 && list.every((r) => prev.has(r.vn));
+      if (allSelected) return new Set();
+      return new Set(list.map((r) => r.vn));
+    });
+  }
+
+  // ตรวจสอบสิทธิสดกับ NHSO online (ทีละคน เว้น 5 วิ) — แสดงผลอย่างเดียว ยังไม่เขียนลง HOSxP
+  async function runVerify() {
+    const targets = rows.filter((r) => selected.has(r.vn));
+    if (targets.length === 0) return;
+    setVerifying(true);
+    setMessage(null);
+    setIsError(false);
+    setProgress({ done: 0, total: targets.length });
+    const results: Record<string, VerifyState> = { ...verifyResult };
+
+    for (let i = 0; i < targets.length; i++) {
+      const row = targets[i];
+      if (!row.cid) {
+        results[row.vn] = { state: "fail", message: "ไม่มีเลขบัตรประชาชน" };
+        setVerifyResult({ ...results });
+        setProgress({ done: i + 1, total: targets.length });
+        continue;
+      }
+      results[row.vn] = { state: "checking", message: "กำลังตรวจสอบ..." };
+      setVerifyResult({ ...results });
+      try {
+        const res = await fetch("/api/eligibility-check/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pid: row.cid }),
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          results[row.vn] = { state: "ok", message: "ตรวจสอบสำเร็จ" };
+        } else {
+          results[row.vn] = { state: "fail", message: data.message || data.error || "ตรวจสอบไม่สำเร็จ" };
+        }
+      } catch {
+        results[row.vn] = { state: "fail", message: "เกิดข้อผิดพลาดในการเรียก" };
+      }
+      setVerifyResult({ ...results });
+      setProgress({ done: i + 1, total: targets.length });
+      if (i < targets.length - 1) await sleep(VERIFY_INTERVAL_MS);
+    }
+    setVerifying(false);
+  }
+
+  function renderVerify(row: Visit) {
+    const v = verifyResult[row.vn];
+    if (!v) return <span style={{ color: "var(--muted)" }}>-</span>;
+    if (v.state === "checking") return <span className="status-pill status-pending">กำลังตรวจสอบ...</span>;
+    if (v.state === "ok") return <span className="status-pill status-y" title={v.message}>ตรวจสอบสำเร็จ</span>;
+    return <span className="status-pill status-n" title={v.message}>{v.message}</span>;
+  }
+
   function renderStatus(row: Visit) {
     if (row.auth_code) {
       const title = `รหัสยืนยันสิทธิ: ${row.auth_code}` + (row.pttype_expire ? ` • หมดอายุ ${formatDate(row.pttype_expire)}` : "");
@@ -246,6 +330,17 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
           <button className="button-primary" onClick={fetchVisits} disabled={!canSearch || loading} style={{ alignSelf: "flex-end" }}>
             {loading ? "กำลังค้นหา..." : "ค้นหา"}
           </button>
+          {rows.length > 0 ? (
+            <button
+              className="button-primary"
+              onClick={runVerify}
+              disabled={verifying || selected.size === 0}
+              style={{ alignSelf: "flex-end" }}
+              title="ตรวจสอบสิทธิสดกับ NHSO (online ด้วย token) — ยังไม่บันทึกลง HOSxP"
+            >
+              {verifying ? `กำลังตรวจสอบ... (${progress?.done ?? 0}/${progress?.total ?? 0})` : `ตรวจสอบสิทธิ (${selected.size} ราย)`}
+            </button>
+          ) : null}
         </div>
 
         {message ? <div className={`status-message ${isError ? "status-error" : "status-success"}`}>{message}</div> : null}
@@ -270,6 +365,14 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
               <table className="data-table">
                 <thead>
                   <tr>
+                    <th className="action-col">
+                      <input
+                        type="checkbox"
+                        checked={filteredRows.length > 0 && filteredRows.every((r) => selected.has(r.vn))}
+                        onChange={() => toggleSelectAll(filteredRows)}
+                        title="เลือกทั้งหมด"
+                      />
+                    </th>
                     <th>วันที่รับบริการ</th>
                     <th>VN</th>
                     <th>HN</th>
@@ -277,12 +380,16 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
                     <th>เลขบัตรประชาชน</th>
                     <th>สิทธิ (HOSxP)</th>
                     <th>สถานะ</th>
+                    <th>ผลตรวจสด (NHSO)</th>
                     <th>จัดการ</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRows.map((row) => (
                     <tr key={row.vn}>
+                      <td className="action-col">
+                        <input type="checkbox" checked={selected.has(row.vn)} onChange={() => toggleSelect(row.vn)} />
+                      </td>
                       <td>{formatDate(row.vstdate)}</td>
                       <td>{row.vn}</td>
                       <td>{row.hn}</td>
@@ -290,6 +397,7 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
                       <td>{row.cid || "-"}</td>
                       <td className="wrap">{row.pttype_name || "-"}</td>
                       <td>{renderStatus(row)}</td>
+                      <td>{renderVerify(row)}</td>
                       <td>
                         <button
                           className="button-ghost"
