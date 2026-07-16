@@ -336,12 +336,32 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
     }
   }
 
-  function autoUpdate(row: Visit) {
-    // ปุ่มอัพเดทอัตโนมัติจากผล NHSO — รอเอกสาร/endpoint API ตรวจสอบสิทธิด้วย token (nhso_token)
-    setIsError(true);
-    setMessage(
-      `ยังเปิดใช้งาน "อัพเดทอัตโนมัติ" ไม่ได้ (VN ${row.vn}) — ต้องเชื่อม NHSO API ตรวจสอบสิทธิด้วย token ก่อน กรุณาส่งเอกสาร endpoint API เพื่อเปิดใช้งาน`
-    );
+  async function autoUpdate(row: Visit) {
+    // ตรวจ token ของคน login ก่อน (ต้องใช้ได้และยังไม่หมดอายุ) แล้วแจ้งสถานะให้ชัด
+    try {
+      const res = await fetch("/api/eligibility-check/token-status");
+      const data = await res.json();
+      if (!res.ok) {
+        setIsError(true);
+        setMessage(data.error || "ไม่สามารถตรวจสอบ NHSO token ได้");
+        return;
+      }
+      if (!data.hasValidToken) {
+        setIsError(true);
+        setMessage(
+          `ไม่มี NHSO token ที่ใช้ได้สำหรับผู้ใช้ "${data.loginname}" (ไม่มี หรือหมดอายุแล้ว) — กรุณาเข้าระบบ NHSO ในโปรแกรม HOSxP เพื่อรับ token ใหม่ก่อน`
+        );
+        return;
+      }
+      // มี token พร้อมใช้ แต่ยังขาด endpoint API ตรวจสอบสิทธิ
+      setIsError(true);
+      setMessage(
+        `มี NHSO token พร้อมใช้ (หมดอายุ ${data.expire ? formatDateTime(data.expire) : "-"}) แต่ยังยิงอัตโนมัติไม่ได้ (VN ${row.vn}) — รอเอกสาร endpoint API ตรวจสอบสิทธิเพื่อเปิดใช้งาน`
+      );
+    } catch {
+      setIsError(true);
+      setMessage("เกิดข้อผิดพลาดในการตรวจสอบ token");
+    }
   }
 
   function renderCheckStatus(row: Visit) {
