@@ -24,6 +24,11 @@ type Visit = {
   vsttime: string;
   cid: string | null;
   patient_name: string | null;
+  // สถานะสิทธิที่ HOSxP บันทึกไว้แล้ว (จาก visit_pttype)
+  auth_code: string | null;
+  pttype: string | null;
+  pttype_name: string | null;
+  pttype_expire: string | null;
   lastCheck: { status: "success" | "error"; claim_type: string | null; claim_code: string | null; checked_at: string } | null;
 };
 
@@ -229,6 +234,15 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
     if (live?.state === "success") return <span className="status-pill status-y" title={live.detail}>{live.detail}</span>;
     if (live?.state === "error") return <span className="status-pill status-n" title={live.detail}>{live.detail}</span>;
     if (live?.state === "skipped") return <span className="status-pill status-pending">{live.detail}</span>;
+    // HOSxP มี auth_code แล้ว = ตรวจสอบสิทธิแล้ว (ถือเป็นสถานะจริงที่เชื่อถือได้)
+    if (row.auth_code) {
+      const title = `รหัสยืนยันสิทธิ: ${row.auth_code}` + (row.pttype_expire ? ` • หมดอายุ ${formatDate(row.pttype_expire)}` : "");
+      return (
+        <span className="status-pill status-y" title={title}>
+          ตรวจสอบแล้ว
+        </span>
+      );
+    }
     if (row.lastCheck) {
       const pillClass = row.lastCheck.status === "success" ? "status-y" : "status-n";
       const label =
@@ -337,6 +351,7 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
                   <th>HN</th>
                   <th>ชื่อ-สกุล</th>
                   <th>เลขบัตรประชาชน</th>
+                  <th>สิทธิ (HOSxP)</th>
                   <th>ผลตรวจสอบสิทธิ</th>
                 </tr>
               </thead>
@@ -351,6 +366,7 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
                     <td>{row.hn}</td>
                     <td className="wrap">{row.patient_name || "-"}</td>
                     <td>{row.cid || "-"}</td>
+                    <td className="wrap">{row.pttype_name || "-"}</td>
                     <td>{renderCheckStatus(row)}</td>
                   </tr>
                 ))}

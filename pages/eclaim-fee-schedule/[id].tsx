@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import Link from "next/link";
 import { GetServerSideProps } from "next";
 import { getSession } from "../../lib/session";
 import { getHospitalName } from "../../lib/db";
@@ -99,6 +98,16 @@ export default function EclaimFeeScheduleEdit({ loginname, hospitalName }: { log
     setRow((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
+  // กลับไปหน้ารายการโดยคงการค้นหา/ตัวกรองเดิมไว้ (router.back คืน URL เดิมพร้อม query)
+  // ถ้าเปิดหน้านี้ตรงๆ (ไม่มีประวัติ) ให้ push กลับหน้ารายการแทน
+  function goBack() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/eclaim-fee-schedule");
+    }
+  }
+
   async function handleSave() {
     if (!row) return;
     setSaving(true);
@@ -111,8 +120,9 @@ export default function EclaimFeeScheduleEdit({ loginname, hospitalName }: { log
       });
       const data = await res.json();
       if (res.ok) {
-        setRow(data.row);
-        setMessage("บันทึกข้อมูลสำเร็จ");
+        // บันทึกสำเร็จ → ปิดหน้าต่างแก้ไข กลับไปหน้ารายการที่ค้นหาไว้เดิม
+        goBack();
+        return;
       } else {
         setMessage(data.error || "ไม่สามารถบันทึกข้อมูลได้");
       }
@@ -129,7 +139,9 @@ export default function EclaimFeeScheduleEdit({ loginname, hospitalName }: { log
     <Layout title={`แก้ไข eClaim Fee Schedule #${id}`} loginname={loginname} hospitalName={hospitalName}>
       <div className="page-card">
         <div className="toolbar" style={{ justifyContent: "space-between", marginBottom: 24 }}>
-          <Link href="/eclaim-fee-schedule">&larr; กลับไปรายการ</Link>
+          <a role="button" tabIndex={0} onClick={goBack} style={{ cursor: "pointer" }}>
+            &larr; กลับไปรายการ
+          </a>
         </div>
         <div className="brand" style={{ marginBottom: 24 }}>
           <h1 className="page-title" style={{ marginBottom: 0 }}>
@@ -192,6 +204,7 @@ export default function EclaimFeeScheduleEdit({ loginname, hospitalName }: { log
                       <input
                         className="input-field"
                         type="datetime-local"
+                        lang="th"
                         value={toDatetimeLocal(row[field.key])}
                         onChange={(e) => updateField(field.key, e.target.value)}
                       />
@@ -224,9 +237,9 @@ export default function EclaimFeeScheduleEdit({ loginname, hospitalName }: { log
               <button className="button-primary" onClick={handleSave} disabled={saving}>
                 {saving ? "กำลังบันทึก..." : "บันทึกข้อมูล"}
               </button>
-              <Link href="/eclaim-fee-schedule" className="button-ghost">
+              <button className="button-ghost" onClick={goBack} disabled={saving}>
                 ยกเลิก
-              </Link>
+              </button>
             </div>
           </>
         )}

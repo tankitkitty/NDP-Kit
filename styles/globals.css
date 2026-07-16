@@ -641,3 +641,114 @@ button {
   color: var(--highlight);
   margin: 0 0 16px;
 }
+
+/* ---------- Tabs ---------- */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 16px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.active {
+  color: var(--highlight);
+  border-bottom-color: var(--highlight);
+  font-weight: 600;
+}
+
+/* ---------- Toast (แจ้งเตือนเด้งด้านบน) ---------- */
+
+.toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 300px;
+  max-width: 92vw;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--muted);
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.18);
+  font-weight: 500;
+  cursor: pointer;
+  animation: toast-in 0.2s ease;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.toast-success {
+  border-left-color: #16a34a;
+}
+
+.toast-error {
+  border-left-color: #dc2626;
+}
+
+.toast-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.toast-success .toast-icon {
+  background: #16a34a;
+}
+
+.toast-error .toast-icon {
+  background: #dc2626;
+}
+
+.toast-close {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.toast-close:hover {
+  color: var(--text);
+}

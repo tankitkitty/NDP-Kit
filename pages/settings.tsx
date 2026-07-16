@@ -60,16 +60,28 @@ export default function Settings({
     password: "",
     database: "",
   });
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [savingConfig, setSavingConfig] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [savingConfig43, setSavingConfig43] = useState(false);
   const [testingConnection43, setTestingConnection43] = useState(false);
+  const [activeTab, setActiveTab] = useState<"main" | "file43" | "nhso">("main");
 
   useEffect(() => {
     fetchConfig();
     fetchConfig43();
   }, []);
+
+  // แจ้งเตือนแบบ toast แล้วหายเองใน 4 วินาที
+  function showToast(text: string, type: "success" | "error") {
+    setMessage({ text, type });
+  }
+
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [message]);
 
   async function fetchConfig() {
     try {
@@ -78,7 +90,7 @@ export default function Settings({
       if (res.ok && data.config) {
         setConfig(data.config);
       } else if (!res.ok) {
-        setMessage(data.error || "ไม่สามารถโหลดการตั้งค่าได้");
+        showToast(data.error || "ไม่สามารถโหลดการตั้งค่าได้", "error");
       }
     } catch (error) {
       console.error(error);
@@ -88,7 +100,7 @@ export default function Settings({
   async function saveConfig() {
     const validationError = validateConfig(config);
     if (validationError) {
-      setMessage(validationError);
+      showToast(validationError, "error");
       return;
     }
 
@@ -101,12 +113,12 @@ export default function Settings({
       });
       const data = await res.json();
       if (res.ok) {
-        setMessage(data.message || "บันทึกสำเร็จ");
+        showToast(data.message || "บันทึกสำเร็จ", "success");
       } else {
-        setMessage(data.error || "ไม่สามารถบันทึกการตั้งค่าได้");
+        showToast(data.error || "ไม่สามารถบันทึกการตั้งค่าได้", "error");
       }
     } catch (error) {
-      setMessage("เกิดข้อผิดพลาดในการบันทึก");
+      showToast("เกิดข้อผิดพลาดในการบันทึก", "error");
     } finally {
       setSavingConfig(false);
     }
@@ -115,7 +127,7 @@ export default function Settings({
   async function testConnection() {
     const validationError = validateConfig(config);
     if (validationError) {
-      setMessage(validationError);
+      showToast(validationError, "error");
       return;
     }
 
@@ -128,12 +140,12 @@ export default function Settings({
       });
       const data = await res.json();
       if (res.ok) {
-        setMessage(data.message || "เชื่อมต่อฐานข้อมูลสำเร็จ");
+        showToast(data.message || "เชื่อมต่อฐานข้อมูลสำเร็จ", "success");
       } else {
-        setMessage(data.error || "ไม่สามารถเชื่อมต่อฐานข้อมูลได้");
+        showToast(data.error || "ไม่สามารถเชื่อมต่อฐานข้อมูลได้", "error");
       }
     } catch (error) {
-      setMessage("เกิดข้อผิดพลาดในการทดสอบเชื่อมต่อ");
+      showToast("เกิดข้อผิดพลาดในการทดสอบเชื่อมต่อ", "error");
     } finally {
       setTestingConnection(false);
     }
@@ -154,7 +166,7 @@ export default function Settings({
   async function saveConfig43() {
     const validationError = validateConfig(config43);
     if (validationError) {
-      setMessage(validationError);
+      showToast(validationError, "error");
       return;
     }
 
@@ -167,12 +179,12 @@ export default function Settings({
       });
       const data = await res.json();
       if (res.ok) {
-        setMessage(data.message || "บันทึกสำเร็จ");
+        showToast(data.message || "บันทึกสำเร็จ", "success");
       } else {
-        setMessage(data.error || "ไม่สามารถบันทึกการตั้งค่าได้");
+        showToast(data.error || "ไม่สามารถบันทึกการตั้งค่าได้", "error");
       }
     } catch (error) {
-      setMessage("เกิดข้อผิดพลาดในการบันทึก");
+      showToast("เกิดข้อผิดพลาดในการบันทึก", "error");
     } finally {
       setSavingConfig43(false);
     }
@@ -181,7 +193,7 @@ export default function Settings({
   async function testConnection43() {
     const validationError = validateConfig(config43);
     if (validationError) {
-      setMessage(validationError);
+      showToast(validationError, "error");
       return;
     }
 
@@ -194,12 +206,12 @@ export default function Settings({
       });
       const data = await res.json();
       if (res.ok) {
-        setMessage(data.message || "เชื่อมต่อฐานข้อมูลสำเร็จ");
+        showToast(data.message || "เชื่อมต่อฐานข้อมูลสำเร็จ", "success");
       } else {
-        setMessage(data.error || "ไม่สามารถเชื่อมต่อฐานข้อมูลได้");
+        showToast(data.error || "ไม่สามารถเชื่อมต่อฐานข้อมูลได้", "error");
       }
     } catch (error) {
-      setMessage("เกิดข้อผิดพลาดในการทดสอบเชื่อมต่อ");
+      showToast("เกิดข้อผิดพลาดในการทดสอบเชื่อมต่อ", "error");
     } finally {
       setTestingConnection43(false);
     }
@@ -208,10 +220,23 @@ export default function Settings({
   return (
     <Layout title="ตั้งค่าการเชื่อมต่อ" hospitalName={hospitalName} loginname={loginname || undefined}>
       <div className="page-card">
-        <div className="brand" style={{ marginBottom: 16 }}>
+        <div className="brand" style={{ marginBottom: 20 }}>
           <h1 className="page-title" style={{ marginBottom: 0 }}>ตั้งค่าการเชื่อมต่อ</h1>
         </div>
 
+        <div className="tabs">
+          <button className={`tab ${activeTab === "main" ? "active" : ""}`} onClick={() => setActiveTab("main")}>
+            ฐานข้อมูลหลัก
+          </button>
+          <button className={`tab ${activeTab === "file43" ? "active" : ""}`} onClick={() => setActiveTab("file43")}>
+            ฐานข้อมูล 43 แฟ้ม
+          </button>
+          <button className={`tab ${activeTab === "nhso" ? "active" : ""}`} onClick={() => setActiveTab("nhso")}>
+            NHSO API
+          </button>
+        </div>
+
+        {activeTab === "main" ? (
         <section>
           <h2 className="section-title">ตั้งค่าฐานข้อมูล</h2>
           <div className="add-item-card" style={{ maxWidth: 560 }}>
@@ -274,8 +299,10 @@ export default function Settings({
             </div>
           </div>
         </section>
+        ) : null}
 
-        <section style={{ marginTop: 32 }}>
+        {activeTab === "file43" ? (
+        <section>
           <h2 className="section-title">ตั้งค่าฐานข้อมูล 43 แฟ้ม</h2>
           <div className="add-item-card" style={{ maxWidth: 560 }}>
             <div className="grid-form">
@@ -337,8 +364,10 @@ export default function Settings({
             </div>
           </div>
         </section>
+        ) : null}
 
-        <section style={{ marginTop: 32 }}>
+        {activeTab === "nhso" ? (
+        <section>
           <div className="section-header">
             <h2 className="section-title" style={{ margin: 0 }}>
               การเชื่อมต่อ NHSO Digital Platform API
@@ -364,9 +393,19 @@ export default function Settings({
             </div>
           </div>
         </section>
+        ) : null}
 
-        {message ? <div className="status-message">{message}</div> : null}
       </div>
+
+      {message ? (
+        <div className={`toast toast-${message.type}`} role="alert" onClick={() => setMessage(null)}>
+          <span className="toast-icon">{message.type === "success" ? "✓" : "✕"}</span>
+          <span>{message.text}</span>
+          <button className="toast-close" onClick={() => setMessage(null)} aria-label="ปิด">
+            ×
+          </button>
+        </div>
+      ) : null}
     </Layout>
   );
 }
