@@ -145,3 +145,40 @@ export async function ensureEligibilityCheckTable() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
 }
+
+// ตาราง log สำรองการแก้ไขสิทธิใน visit_pttype (เก็บในฐานเราเอง แยกจาก HOSxP)
+// เก็บค่าเดิมทั้งแถวเป็น JSON (full_before) เพื่อให้กู้คืนได้ครบทุกฟิลด์
+export async function ensurePttypeEditLogTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS pttype_edit_log (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      vn VARCHAR(13) NULL,
+      pttype_before VARCHAR(2) NULL,
+      pttype_after VARCHAR(2) NULL,
+      auth_code_before VARCHAR(30) NULL,
+      auth_code_after VARCHAR(30) NULL,
+      hospmain_before VARCHAR(9) NULL,
+      hospmain_after VARCHAR(9) NULL,
+      hospsub_before VARCHAR(9) NULL,
+      hospsub_after VARCHAR(9) NULL,
+      begin_date_before VARCHAR(10) NULL,
+      begin_date_after VARCHAR(10) NULL,
+      expire_date_before VARCHAR(10) NULL,
+      expire_date_after VARCHAR(10) NULL,
+      full_before MEDIUMTEXT NULL,
+      edited_by VARCHAR(100) NULL,
+      edited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_vn (vn),
+      INDEX idx_edited_at (edited_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
+}
+
+// เก็บ log สำรองไว้ 90 วัน แล้วลบอัตโนมัติ (ค่าคงที่ในโค้ด จึงปลอดภัยกับ template)
+const PTTYPE_LOG_RETENTION_DAYS = 90;
+
+export async function pruneOldPttypeEditLogs() {
+  await query(
+    `DELETE FROM pttype_edit_log WHERE edited_at < DATE_SUB(NOW(), INTERVAL ${PTTYPE_LOG_RETENTION_DAYS} DAY)`
+  );
+}

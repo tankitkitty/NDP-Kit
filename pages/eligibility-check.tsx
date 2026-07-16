@@ -70,6 +70,33 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
   const [checking, setChecking] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
+  // แก้ไขสิทธิ (visit_pttype) เอง
+  type EditForm = {
+    vn: string;
+    originalPttype: string;
+    pttype: string;
+    auth_code: string;
+    hospmain: string;
+    hospsub: string;
+    begin_date: string;
+    expire_date: string;
+    patientName: string;
+    pttypeName: string;
+  };
+  type EditLog = {
+    id: number;
+    pttype_before: string | null;
+    pttype_after: string | null;
+    auth_code_before: string | null;
+    auth_code_after: string | null;
+    edited_by: string | null;
+    edited_at: string;
+  };
+  const [editForm, setEditForm] = useState<EditForm | null>(null);
+  const [editHistory, setEditHistory] = useState<EditLog[]>([]);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+
   async function fetchVisits() {
     if (!fromDraft || !toDraft) return;
     setLoading(true);
@@ -229,6 +256,94 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
     );
   }
 
+  async function openEdit(row: Visit) {
+    if (!row.pttype) {
+      setIsError(true);
+      setMessage(`VN ${row.vn} ยังไม่มีข้อมูลสิทธิใน HOSxP จึงแก้ไขไม่ได้ (ระบบไม่เพิ่มแถวใหม่)`);
+      return;
+    }
+    setEditLoading(true);
+    setEditHistory([]);
+    setEditForm({
+      vn: row.vn,
+      originalPttype: row.pttype,
+      pttype: row.pttype,
+      auth_code: row.auth_code || "",
+      hospmain: "",
+      hospsub: "",
+      begin_date: "",
+      expire_date: row.pttype_expire || "",
+      patientName: row.patient_name || "",
+      pttypeName: row.pttype_name || "",
+    });
+    try {
+      const params = new URLSearchParams({ vn: row.vn, pttype: row.pttype });
+      const res = await fetch(`/api/eligibility-check/pttype?${params.toString()}`);
+      const data = await res.json();
+      if (res.ok && data.row) {
+        const r = data.row;
+        setEditForm({
+          vn: r.vn,
+          originalPttype: r.pttype,
+          pttype: r.pttype,
+          auth_code: r.auth_code || "",
+          hospmain: r.hospmain || "",
+          hospsub: r.hospsub || "",
+          begin_date: r.begin_date || "",
+          expire_date: r.expire_date || "",
+          patientName: row.patient_name || "",
+          pttypeName: r.pttype_name || row.pttype_name || "",
+        });
+        setEditHistory(Array.isArray(data.history) ? data.history : []);
+      }
+    } catch {
+      /* ใช้ค่าเริ่มต้นจากแถวในตารางไปก่อน */
+    } finally {
+      setEditLoading(false);
+    }
+  }
+
+  async function saveEdit() {
+    if (!editForm) return;
+    setEditSaving(true);
+    try {
+      const res = await fetch("/api/eligibility-check/pttype", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vn: editForm.vn,
+          originalPttype: editForm.originalPttype,
+          pttype: editForm.pttype,
+          auth_code: editForm.auth_code,
+          hospmain: editForm.hospmain,
+          hospsub: editForm.hospsub,
+          begin_date: editForm.begin_date,
+          expire_date: editForm.expire_date,
+        }),
+      });
+      const data = await res.json();
+      setIsError(!res.ok);
+      setMessage(res.ok ? data.message || "อัปเดตสิทธิใน HOSxP สำเร็จ" : data.error || "ไม่สามารถอัปเดตได้");
+      if (res.ok) {
+        setEditForm(null);
+        fetchVisits();
+      }
+    } catch {
+      setIsError(true);
+      setMessage("เกิดข้อผิดพลาดในการอัปเดต");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  function autoUpdate(row: Visit) {
+    // ปุ่มอัพเดทอัตโนมัติจากผล NHSO — รอเอกสาร/endpoint API ตรวจสอบสิทธิด้วย token (nhso_token)
+    setIsError(true);
+    setMessage(
+      `ยังเปิดใช้งาน "อัพเดทอัตโนมัติ" ไม่ได้ (VN ${row.vn}) — ต้องเชื่อม NHSO API ตรวจสอบสิทธิด้วย token ก่อน กรุณาส่งเอกสาร endpoint API เพื่อเปิดใช้งาน`
+    );
+  }
+
   function renderCheckStatus(row: Visit) {
     const live = rowState[row.vn];
     if (live?.state === "checking") return <span className="status-pill status-pending">กำลังตรวจสอบ...</span>;
@@ -340,6 +455,7 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
                   <th>เลขบัตรประชาชน</th>
                   <th>สิทธิ (HOSxP)</th>
                   <th>ผลตรวจสอบสิทธิ</th>
+                  <th>จัดการ (HOSxP)</th>
                 </tr>
               </thead>
               <tbody>
@@ -355,6 +471,27 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
                     <td>{row.cid || "-"}</td>
                     <td className="wrap">{row.pttype_name || "-"}</td>
                     <td>{renderCheckStatus(row)}</td>
+                    <td>
+                      <div className="toolbar" style={{ flexWrap: "nowrap", gap: 6 }}>
+                        <button
+                          className="button-ghost"
+                          style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                          onClick={() => openEdit(row)}
+                          disabled={!row.pttype}
+                          title={row.pttype ? "แก้ไขสิทธิเองแล้วบันทึกลง HOSxP" : "ไม่มีข้อมูลสิทธิใน HOSxP"}
+                        >
+                          แก้ไขเอง
+                        </button>
+                        <button
+                          className="button-ghost"
+                          style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                          onClick={() => autoUpdate(row)}
+                          title="อัพเดทสิทธิลง HOSxP อัตโนมัติจากผล NHSO (ต้องเชื่อม API)"
+                        >
+                          อัพเดทอัตโนมัติ
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -362,6 +499,91 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
           </div>
         )}
       </div>
+
+      {editForm ? (
+        <div className="modal-backdrop" onClick={() => !editSaving && setEditForm(null)}>
+          <div className="modal-card" style={{ maxWidth: 520, textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
+            <h2 className="section-title" style={{ marginTop: 0 }}>แก้ไขสิทธิ (บันทึกลง HOSxP)</h2>
+            <p style={{ margin: "0 0 16px", color: "var(--muted)", fontSize: "0.9rem" }}>
+              VN {editForm.vn} • {editForm.patientName || "-"}
+            </p>
+            <div className="grid-form">
+              <div className="form-row">
+                <div className="label-group">
+                  <label>รหัสสิทธิ (pttype)</label>
+                  <input
+                    className="input-field"
+                    value={editForm.pttype}
+                    onChange={(e) => setEditForm({ ...editForm, pttype: e.target.value })}
+                  />
+                </div>
+                <div className="label-group">
+                  <label>รหัสยืนยันสิทธิ (auth_code)</label>
+                  <input
+                    className="input-field"
+                    value={editForm.auth_code}
+                    onChange={(e) => setEditForm({ ...editForm, auth_code: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="label-group">
+                  <label>รพ.หลัก (hospmain)</label>
+                  <input
+                    className="input-field"
+                    value={editForm.hospmain}
+                    onChange={(e) => setEditForm({ ...editForm, hospmain: e.target.value })}
+                  />
+                </div>
+                <div className="label-group">
+                  <label>รพ.รอง (hospsub)</label>
+                  <input
+                    className="input-field"
+                    value={editForm.hospsub}
+                    onChange={(e) => setEditForm({ ...editForm, hospsub: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="label-group">
+                  <label>วันเริ่มสิทธิ</label>
+                  <DateField value={editForm.begin_date} onChange={(v) => setEditForm({ ...editForm, begin_date: v })} />
+                </div>
+                <div className="label-group">
+                  <label>วันหมดอายุสิทธิ</label>
+                  <DateField value={editForm.expire_date} onChange={(v) => setEditForm({ ...editForm, expire_date: v })} />
+                </div>
+              </div>
+              {editLoading ? <p style={{ margin: 0, color: "var(--muted)" }}>กำลังโหลดข้อมูลปัจจุบัน...</p> : null}
+              <p style={{ margin: "4px 0 0", color: "#b45309", fontSize: "0.85rem" }}>
+                ⚠ การบันทึกจะเขียนทับข้อมูลสิทธิใน HOSxP ทันที (ตารางเป็น MyISAM ย้อนกลับไม่ได้) — ระบบจะเก็บ log สำรองค่าเดิมให้อัตโนมัติก่อนบันทึก
+              </p>
+              {editHistory.length > 0 ? (
+                <div style={{ marginTop: 8, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: 6 }}>
+                    ประวัติการแก้ไข (log สำรอง)
+                  </div>
+                  <div style={{ maxHeight: 120, overflowY: "auto", fontSize: "0.8rem", color: "var(--muted)" }}>
+                    {editHistory.map((h) => (
+                      <div key={h.id} style={{ padding: "3px 0" }}>
+                        {formatDateTime(h.edited_at)} • {h.edited_by || "-"} : สิทธิ {h.pttype_before || "-"}→{h.pttype_after || "-"}, auth {h.auth_code_before || "-"}→{h.auth_code_after || "-"}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <div className="toolbar" style={{ justifyContent: "flex-end", marginTop: 20 }}>
+              <button className="button-ghost" onClick={() => setEditForm(null)} disabled={editSaving}>
+                ยกเลิก
+              </button>
+              <button className="button-primary" onClick={saveEdit} disabled={editSaving || editLoading}>
+                {editSaving ? "กำลังบันทึก..." : "บันทึกลง HOSxP"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </Layout>
   );
 }
