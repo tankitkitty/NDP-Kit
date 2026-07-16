@@ -6,7 +6,7 @@
 
 - **Node.js** เวอร์ชัน 18 ขึ้นไป และ npm (ติดตั้งมาพร้อมกัน)
 - **Git**
-- สิทธิ์เข้าถึง **MySQL server ของ HOSxP** (ฐานข้อมูลชื่อ `pcu` หรือชื่ออื่นตามที่โรงพยาบาลตั้งไว้) พร้อม user/password ที่มีสิทธิ์อ่าน-เขียนตารางที่เกี่ยวข้อง เช่น `opduser`, `opdconfig`, `eclaim_fee_schedule`
+- สิทธิ์เข้าถึง **MySQL server ของ HOSxP PCU** (ฐานข้อมูลชื่อ `pcu` หรือชื่ออื่นตามที่โรงพยาบาลตั้งไว้) พร้อม user/password ที่มีสิทธิ์อ่าน-เขียนตารางที่เกี่ยวข้อง เช่น `officer`, `opdconfig`, `eclaim_fee_schedule`
 - (ถ้าต้องการใช้ฟีเจอร์ซิงค์สถานะเคลม NHSO) ข้อมูลเชื่อมต่อ NHSO Digital Platform จาก สปสช.
 
 ## 2. ดาวน์โหลดโค้ด
@@ -95,15 +95,16 @@ npm run start
 ## 7. เข้าสู่ระบบครั้งแรก
 
 - เข้าเว็บแอปจะพาไปหน้า `เข้าสู่ระบบ` ก่อนเสมอ
-- ล็อกอินด้วย **Username / Password ของผู้ใช้งานในตาราง `opduser`** ของฐานข้อมูล HOSxP ที่ตั้งค่าไว้ในขั้นตอนที่ 4 (ระบบเทียบรหัสผ่านกับคอลัมน์ `passweb`)
-- บัญชีที่ถูกตั้ง `account_disable = 'Y'` จะเข้าระบบไม่ได้
+- ล็อกอินด้วย **Username / Password ของเจ้าหน้าที่ในตาราง `officer`** ของฐานข้อมูล HOSxP PCU ที่ตั้งค่าไว้ในขั้นตอนที่ 4 (ระบบเทียบชื่อผู้ใช้กับ `officer_login_name` และรหัสผ่านกับ `officer_login_password_md5` = MD5 ของรหัสผ่าน)
+- บัญชีที่ตั้ง `officer_active = 'N'` จะเข้าระบบไม่ได้
+- ผู้ใช้ที่ **ยังไม่เคยตั้งรหัสผ่านฝั่งเว็บ** (`officer_login_password_md5` ว่าง) จะเข้าไม่ได้ ต้องตั้งรหัสผ่านในโปรแกรม HOSxP PCU ก่อน หรือใช้ `UPDATE officer SET officer_login_password_md5 = MD5('รหัส') WHERE officer_login_name='...'`
 
 ## 8. แก้ปัญหาที่พบบ่อย
 
 | อาการ | สาเหตุที่เป็นไปได้ | วิธีแก้ |
 | --- | --- | --- |
 | เข้าเว็บแล้ว error เชื่อมต่อฐานข้อมูลไม่ได้ | ค่าใน `data/dbconfig.json` ผิด หรือ MySQL server เข้าไม่ถึง | ไปที่หน้า `/settings` แก้ไขค่าแล้วกด **Test Connection** |
-| ล็อกอินไม่ได้ทั้งที่ username/password ถูก | บัญชีถูกปิด (`account_disable='Y'`) หรือฐานข้อมูลที่เชื่อมต่ออยู่ไม่ใช่ฐานที่มีบัญชีนี้ | ตรวจสอบชื่อฐานข้อมูล (`database`) ในหน้า `/settings` ว่าตรงกับที่ต้องการ |
+| ล็อกอินไม่ได้ทั้งที่ username/password ถูก | ยังไม่ได้ตั้งรหัสผ่านฝั่งเว็บ (`officer_login_password_md5` ว่าง), บัญชีถูกปิด (`officer_active='N'`), หรือเชื่อมต่อผิดฐาน | รัน `SELECT officer_login_name, officer_login_password_md5, officer_active FROM officer WHERE officer_login_name='ชื่อ'` เพื่อตรวจ และตรวจชื่อฐานข้อมูลในหน้า `/settings` |
 | กดปุ่ม "ซิงค์สถานะจาก NHSO" แล้วขึ้น error ว่าตัวแปรขาดหาย | ยังไม่ได้ตั้งค่า `NHSO_*` ใน `.env.local` | ตั้งค่าตัวแปรตามขั้นตอนที่ 5 แล้ว restart เซิร์ฟเวอร์ |
 | แก้ `.env.local` หรือ `data/dbconfig.json` แล้วแอปยังใช้ค่าเดิม | ต้อง restart dev server เพื่อให้อ่านค่าใหม่ (`.env.local` เท่านั้น — `dbconfig.json` อ่านใหม่ทุกครั้งอัตโนมัติ) | หยุดแล้วรัน `npm run dev` ใหม่ |
 

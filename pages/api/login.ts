@@ -67,21 +67,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const passwordHash = crypto.createHash("md5").update(password).digest("hex");
+    // HOSxP PCU เก็บผู้ใช้งานในตาราง officer โดย officer_login_password_md5
+    // คือ MD5 ของรหัสผ่าน (HOSxP เก็บเป็นตัวพิมพ์ใหญ่) — เทียบแบบไม่สนตัวพิมพ์
+    // ด้วย UPPER() ทั้งสองฝั่ง เพื่อให้ตรงกันไม่ว่าฐานจะเก็บเป็นพิมพ์เล็กหรือใหญ่
+    const passwordHash = crypto.createHash("md5").update(password).digest("hex").toUpperCase();
     const rows: any = await query(
-      "SELECT loginname, account_disable FROM opduser WHERE loginname = ? AND passweb = ? LIMIT 1",
+      `SELECT officer_login_name, officer_active
+       FROM officer
+       WHERE officer_login_name = ? AND UPPER(officer_login_password_md5) = ? LIMIT 1`,
       [loginname, passwordHash]
     );
     const user = rows[0];
 
-    if (!user || user.account_disable === "Y") {
+    if (!user || user.officer_active === "N") {
       recordFailure(ip);
       return res.status(401).json({ error: "Username หรือ Password ไม่ถูกต้อง" });
     }
 
     failedAttempts.delete(ip);
 
-    const sessionValue = createSessionValue(user.loginname);
+    const sessionValue = createSessionValue(user.officer_login_name);
     const secureFlag = process.env.NODE_ENV === "production" ? "; Secure" : "";
     res.setHeader(
       "Set-Cookie",

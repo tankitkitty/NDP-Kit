@@ -38,6 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
+      await fs.mkdir(path.dirname(configPath), { recursive: true });
       await fs.writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
       return res.status(200).json({ message: "บันทึกการตั้งค่าฐานข้อมูลสำเร็จ" });
     } catch (error) {
