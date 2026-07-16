@@ -642,6 +642,42 @@ button {
   margin: 0 0 16px;
 }
 
+/* ---------- DateField (แสดง วว/ดด/ปปปป เสมอ ทุกเบราว์เซอร์) ---------- */
+
+.date-field {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.date-field > .input-field {
+  cursor: pointer;
+  padding-right: 36px;
+}
+
+.date-field-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+  display: flex;
+}
+
+/* native date input ซ่อนไว้ (โปร่งใส) แต่ยังเปิดปฏิทินได้ผ่าน showPicker() */
+.date-field-native {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  border: 0;
+  padding: 0;
+  pointer-events: none;
+}
+
 /* ---------- Tabs ---------- */
 
 .tabs {

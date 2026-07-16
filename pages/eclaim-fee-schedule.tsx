@@ -6,6 +6,7 @@ import { getSession } from "../lib/session";
 import { getCurrentMonthRange } from "../lib/date";
 import { getHospitalName } from "../lib/db";
 import Layout from "../components/Layout";
+import DateField from "../components/DateField";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const STATUS_VALUES: Status[] = ["N", "Y", "C", "null", "all"];
@@ -365,25 +366,11 @@ export default function EclaimFeeSchedule({ loginname, hospitalName }: { loginna
         <div className="toolbar" style={{ marginBottom: 24 }}>
           <div className="label-group" style={{ gap: 4 }}>
             <label>วันที่ส่งเคลมตั้งแต่</label>
-            <input
-              className="input-field"
-              type="date"
-              lang="th"
-              value={fromDraft}
-              max={toDraft || undefined}
-              onChange={(e) => setFromDraft(e.target.value)}
-            />
+            <DateField value={fromDraft} max={toDraft || undefined} onChange={setFromDraft} />
           </div>
           <div className="label-group" style={{ gap: 4 }}>
             <label>ถึงวันที่</label>
-            <input
-              className="input-field"
-              type="date"
-              lang="th"
-              value={toDraft}
-              min={fromDraft || undefined}
-              onChange={(e) => setToDraft(e.target.value)}
-            />
+            <DateField value={toDraft} min={fromDraft || undefined} onChange={setToDraft} />
           </div>
           <div className="label-group" style={{ gap: 4 }}>
             <label>สถานะ</label>

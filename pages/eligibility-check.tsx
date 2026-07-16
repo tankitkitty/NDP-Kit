@@ -4,6 +4,7 @@ import { getSession } from "../lib/session";
 import { getHospitalName } from "../lib/db";
 import { getCurrentMonthRange } from "../lib/date";
 import Layout from "../components/Layout";
+import DateField from "../components/DateField";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const session = getSession(context.req);
@@ -280,25 +281,11 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
         <div className="toolbar" style={{ marginBottom: 24 }}>
           <div className="label-group" style={{ gap: 4 }}>
             <label>วันที่รับบริการตั้งแต่</label>
-            <input
-              className="input-field"
-              type="date"
-              lang="th"
-              value={fromDraft}
-              max={toDraft || undefined}
-              onChange={(e) => setFromDraft(e.target.value)}
-            />
+            <DateField value={fromDraft} max={toDraft || undefined} onChange={setFromDraft} />
           </div>
           <div className="label-group" style={{ gap: 4 }}>
             <label>ถึงวันที่</label>
-            <input
-              className="input-field"
-              type="date"
-              lang="th"
-              value={toDraft}
-              min={fromDraft || undefined}
-              onChange={(e) => setToDraft(e.target.value)}
-            />
+            <DateField value={toDraft} min={fromDraft || undefined} onChange={setToDraft} />
           </div>
           <button className="button-primary" onClick={fetchVisits} disabled={!canSearch || loading} style={{ alignSelf: "flex-end" }}>
             {loading ? "กำลังค้นหา..." : "ค้นหา"}
