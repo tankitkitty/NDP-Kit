@@ -5,6 +5,13 @@
 
 > **แนวคิดสำคัญ:** หน่วยบริการดึงโค้ดตาม **git tag** (เช่น `v1.0.0`, `v1.1.0`) ไม่ใช่ branch `master`
 > ดังนั้นทุกครั้งที่จะปล่อยของใหม่ ต้อง (1) commit → (2) ตั้ง tag เวอร์ชันใหม่ → (3) push ทั้ง commit และ tag
+>
+> **Docker image อัตโนมัติ:** เมื่อ push tag `v*` ขึ้น GitHub, workflow `.github/workflows/docker-release.yml`
+> จะ build image แล้วเผยแพร่ที่ `ghcr.io/tankitkitty/13filetools` (tag: `latest`, `1.1.0`, `1.1`) ให้เอง —
+> หน่วยบริการที่ติดตั้งแบบ Docker แค่รัน `docker compose pull && docker compose up -d` ก็ได้เวอร์ชันใหม่
+>
+> **ตั้งค่าครั้งแรกครั้งเดียว:** หลัง workflow รันสำเร็จครั้งแรก เข้า GitHub → หน้า repo → Packages →
+> `13filetools` → Package settings → เปลี่ยน **visibility เป็น Public** เพื่อให้หน่วยบริการ pull ได้โดยไม่ต้อง login GHCR
 
 ---
 

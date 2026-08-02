@@ -14,6 +14,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/import-43file", label: "นำเข้า 43 แฟ้ม" },
   { href: "/eclaim-fee-schedule", label: "eClaim Fee Schedule" },
   { href: "/eligibility-check", label: "ตรวจสอบสิทธิ" },
+  { href: "/ndp-precheck", label: "ตรวจก่อนส่งเคลม NDP" },
+  { href: "/setup-checklist", label: "Checklist ตั้งค่า" },
   { href: "/settings", label: "ตั้งค่าการเชื่อมต่อ" },
 ];
 

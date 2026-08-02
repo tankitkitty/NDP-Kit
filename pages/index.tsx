@@ -30,6 +30,12 @@ export default function Home({ loginname, hospitalName }: { loginname: string; h
           <Link href="/eclaim-fee-schedule" className="button-primary">
             ตรวจสอบ eClaim Fee Schedule
           </Link>
+          <Link href="/ndp-precheck" className="button-primary">
+            ตรวจก่อนส่งเคลม NDP
+          </Link>
+          <Link href="/setup-checklist" className="button-primary">
+            Checklist ตั้งค่าเริ่มต้น
+          </Link>
         </div>
       </div>
     </Layout>

@@ -1,0 +1,47 @@
+# Build Docker image อัตโนมัติทุกครั้งที่ push tag เวอร์ชัน (v1.2.3)
+# แล้วเผยแพร่ที่ ghcr.io/tankitkitty/13filetools ให้หน่วยบริการ pull ไปใช้
+#
+# ครั้งแรกหลัง workflow นี้รันสำเร็จ: เข้า GitHub → Packages → 13filetools →
+# Package settings → เปลี่ยน visibility เป็น Public เพื่อให้หน่วยบริการ pull ได้โดยไม่ต้อง login
+name: docker-release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # สร้าง tag ของ image จาก git tag: v1.2.3 -> 1.2.3, 1.2, latest
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

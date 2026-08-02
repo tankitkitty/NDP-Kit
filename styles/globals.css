@@ -788,3 +788,156 @@ button {
 .toast-close:hover {
   color: var(--text);
 }
+
+/* ---------- หน้าตรวจความพร้อมก่อนส่งเคลม NDP + Checklist ตั้งค่า ---------- */
+
+.precheck-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.precheck-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 14px 16px;
+}
+
+.precheck-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.precheck-card-title {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.precheck-range-tag {
+  margin-left: 8px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--highlight);
+  background: #eff6ff;
+  border-radius: 8px;
+  padding: 1px 8px;
+  vertical-align: middle;
+}
+
+.precheck-card-desc {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 2px;
+}
+
+.precheck-card-summary {
+  font-size: 0.88rem;
+  margin-top: 6px;
+}
+
+.precheck-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.precheck-small-btn {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+.precheck-card-body {
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.precheck-section-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+.precheck-note {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 6px;
+}
+
+.precheck-advice {
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 12px;
+  font-size: 0.9rem;
+}
+
+.sql-block {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.83rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+  margin: 0;
+}
+
+.precheck-check-item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 4px;
+  cursor: pointer;
+}
+
+.precheck-check-item input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  accent-color: var(--highlight);
+}
+
+.progress-track {
+  height: 10px;
+  background: var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: #15803d;
+  border-radius: 6px;
+  transition: width 0.25s ease;
+}
+
+.step-card.step-done {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.step-card.step-done .precheck-card-title {
+  text-decoration: line-through;
+  color: #15803d;
+}
+
+.step-link {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--highlight);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.step-link:hover {
+  text-decoration: underline;
+}

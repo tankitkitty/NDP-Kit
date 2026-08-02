@@ -2,6 +2,51 @@
 
 เอกสารนี้อธิบายขั้นตอนติดตั้งและตั้งค่า 13File Tools ตั้งแต่เริ่มต้นจนใช้งานได้จริง
 
+> **วิธีที่ง่ายที่สุด: ติดตั้งด้วย Docker** — ไม่ต้องลง Node.js/Git และอัปเดตด้วยคำสั่งเดียว ดู[ขั้นตอนที่ 0](#0-ติดตั้งด้วย-docker-แนะนำ--ง่ายที่สุด) ด้านล่าง (ขั้นตอนที่ 1-6 สำหรับการติดตั้งแบบดั้งเดิมเท่านั้น)
+
+## 0. ติดตั้งด้วย Docker (แนะนำ — ง่ายที่สุด)
+
+**สิ่งที่ต้องมี:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows) หรือ Docker Engine + Compose (Linux) เท่านั้น
+
+1. สร้างโฟลเดอร์สำหรับติดตั้ง แล้วดาวน์โหลดไฟล์ `docker-compose.yml` จาก GitHub มาวางไว้:
+
+   ```bash
+   mkdir 13file-tools && cd 13file-tools
+   curl -o docker-compose.yml https://raw.githubusercontent.com/tankitkitty/13FileTools/master/docker-compose.yml
+   ```
+
+   (หรือคัดลอกไฟล์ `docker-compose.yml` จากโปรเจกต์มาวางเองก็ได้ — ใช้ไฟล์เดียวพอ ไม่ต้องโคลนทั้งโปรเจกต์)
+
+2. เปิดโปรแกรม:
+
+   ```bash
+   docker compose up -d
+   ```
+
+   ครั้งแรก Docker จะดาวน์โหลด image สำเร็จรูปจาก `ghcr.io/tankitkitty/13filetools` ให้อัตโนมัติ
+
+3. เปิดเบราว์เซอร์ไปที่ `http://localhost:3000` (หรือ `http://<IP เครื่องนี้>:3000` จากเครื่องอื่นในวง LAN) แล้วตั้งค่าฐานข้อมูลผ่านหน้า `/settings` ตามขั้นตอนที่ 7 — ค่าตั้งจะถูกเก็บในโฟลเดอร์ `./data` ข้างไฟล์ compose (mount เป็น volume) จึง**ไม่หายเวลาอัปเดต**
+
+**อัปเดตเวอร์ชันใหม่** (เมื่อผู้ดูแลประกาศ release ใหม่) — สองคำสั่งจบ ค่าตั้งเดิมอยู่ครบ:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+**คำสั่งที่ใช้บ่อย:**
+
+| ต้องการ | คำสั่ง |
+| --- | --- |
+| ดู log | `docker compose logs -f` |
+| restart | `docker compose restart` |
+| ปิดโปรแกรม | `docker compose down` |
+| ตรึงเวอร์ชัน (ไม่เอา latest) | แก้บรรทัด `image:` ใน compose เป็น `...:1.1.0` |
+
+> - เครื่องที่ไม่มีอินเทอร์เน็ต หรือต้องการ build จากโค้ดเอง: โคลนโปรเจกต์เต็ม (จะได้ไฟล์ `docker-compose.override.yml` ที่สั่ง build ให้อัตโนมัติ) แล้วรัน `docker compose up -d --build`
+> - ตัวแปร NHSO_* (ปุ่มซิงค์สถานะเคลม) ตั้งผ่านไฟล์ `.env.local` แล้วเปิดคอมเมนต์ส่วน `env_file:` ใน compose
+> - MySQL ของ HOSxP อยู่คนละเครื่องในวง LAN ใช้ host/IP ปกติได้เลย แต่ถ้า MySQL อยู่**เครื่องเดียวกับ Docker** ให้ใช้ host เป็น `host.docker.internal` แทน `localhost`
+
 ## 1. สิ่งที่ต้องมีก่อน
 
 - **Node.js** เวอร์ชัน 18 ขึ้นไป และ npm (ติดตั้งมาพร้อมกัน)

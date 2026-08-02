@@ -1,0 +1,18 @@
+# สิ่งที่ไม่เอาเข้า Docker image
+node_modules
+.next
+tsconfig.tsbuildinfo
+.git
+.github
+
+# ไฟล์ลับ/ค่าตั้งเฉพาะเครื่อง — ต้องไม่ฝังใน image เด็ดขาด (mount ผ่าน volume แทน)
+data
+.env
+.env.*
+*.pem
+
+# อื่นๆ
+Dockerfile
+docker-compose.yml
+.dockerignore
+*.md
