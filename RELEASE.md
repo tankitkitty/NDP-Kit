@@ -10,8 +10,10 @@
 > จะ build image แล้วเผยแพร่ที่ `ghcr.io/tankitkitty/13filetools` (tag: `latest`, `1.1.0`, `1.1`) ให้เอง —
 > หน่วยบริการที่ติดตั้งแบบ Docker แค่รัน `docker compose pull && docker compose up -d` ก็ได้เวอร์ชันใหม่
 >
-> **ตั้งค่าครั้งแรกครั้งเดียว:** หลัง workflow รันสำเร็จครั้งแรก เข้า GitHub → หน้า repo → Packages →
-> `13filetools` → Package settings → เปลี่ยน **visibility เป็น Public** เพื่อให้หน่วยบริการ pull ได้โดยไม่ต้อง login GHCR
+> **visibility ของ image:** ตรวจกับของจริงแล้วตอนปล่อย v1.1.0 — GitHub ตั้ง package เป็น **Public ให้อัตโนมัติ**
+> เพราะ repo นี้เป็น public หน่วยบริการจึง `docker pull` ได้ทันทีโดยไม่ต้อง login (ไม่ต้องทำอะไรเพิ่ม)
+> ถ้าวันหนึ่งหน่วยบริการ pull แล้วขึ้น `unauthorized` ค่อยไปตั้งเองที่ repo → Packages → `13filetools` →
+> Package settings → Change visibility → Public
 
 ---
 
@@ -140,3 +142,4 @@ npm run build
 | `Updates were rejected (fetch first)` | มีคนอื่น/เครื่องอื่น push ไปก่อน — รัน `git pull --rebase origin master` แล้วค่อย push ใหม่ |
 | เผลอ commit ไฟล์ลับ (dbconfig/.env) ไปแล้วแต่ยังไม่ push | `git rm --cached <ไฟล์>` แล้ว commit ใหม่ ตรวจว่าไฟล์อยู่ใน `.gitignore` |
 | เผลอ push ไฟล์ลับขึ้น GitHub แล้ว | ถือว่ารหัสผ่านนั้น**หลุดแล้ว** ต้องเปลี่ยนรหัสผ่าน DB ทันที และลบไฟล์ออกจากประวัติ git (ปรึกษาก่อนทำ เพราะซับซ้อน) |
+| push tag แล้ว Actions ไม่ทำงาน (ไม่มี run เกิดขึ้น) | เกิดตอนที่ commit นั้น**เพิ่งเพิ่มไฟล์ workflow เข้ามาพร้อมกับ tag** — GitHub ยังไม่รู้จัก workflow ตอนประมวลผล event ของ tag แก้โดย push tag ซ้ำ: `git push origin :refs/tags/v1.1.0` แล้ว `git push origin v1.1.0` (tag ยังชี้ commit เดิม ไม่มีอะไรหาย) — release ครั้งถัดๆ ไปไม่เจอปัญหานี้ |
