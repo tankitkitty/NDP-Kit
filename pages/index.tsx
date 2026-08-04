@@ -3,6 +3,7 @@ import { GetServerSideProps } from "next";
 import { getSession } from "../lib/session";
 import { getHospitalName } from "../lib/db";
 import Layout from "../components/Layout";
+import UpdateBanner from "../components/UpdateBanner";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const session = getSession(context.req);
@@ -16,6 +17,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 export default function Home({ loginname, hospitalName }: { loginname: string; hospitalName: string }) {
   return (
     <Layout loginname={loginname} hospitalName={hospitalName}>
+      <UpdateBanner />
       <div className="page-card">
         <div className="brand" style={{ marginBottom: 24 }}>
           <div>
