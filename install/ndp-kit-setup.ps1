@@ -46,6 +46,18 @@ function Save-State {
   try { [PSCustomObject]$State | ConvertTo-Json | Set-Content $StateFile -Encoding UTF8 } catch {}
 }
 
+# รหัสสำหรับตั้งค่าครั้งแรก - กันคนอื่นใน LAN ชิงเข้าหน้าตั้งค่าก่อนเจ้าหน้าที่
+# แล้วชี้ฐานข้อมูลไปเครื่องของตัวเอง (ดู lib/authGuard.ts ฝั่งโปรแกรม)
+# ชุดตัวอักษร 32 ตัวนี้ตัด I O 0 1 ออกเพราะผู้ใช้ต้องอ่านจากจอแล้วพิมพ์เอง
+# และ 256 หาร 32 ลงตัว การสุ่มด้วย % จึงไม่เอนเอียง
+function New-SetupToken {
+  $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  $bytes = New-Object byte[] 8
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+  return (-join ($bytes | ForEach-Object { $alphabet[$_ % 32] }))
+}
+
 function Head($text) {
   Clear-Host
   Write-Host ('=' * 62) -ForegroundColor DarkCyan
@@ -189,6 +201,10 @@ function Invoke-Install {
   Head 'ขั้นตอนที่ 4/5 : เตรียมไฟล์ตั้งค่า'
   $dataDir = Join-Path $dir 'data'
   if (-not (Test-Path $dataDir)) { New-Item -ItemType Directory -Path $dataDir -Force | Out-Null }
+  # ถ้ามี dbconfig.json อยู่แล้วแปลว่าเครื่องนี้ตั้งค่าเสร็จไปแล้ว (กดเมนู 1 เพื่ออัปเดต)
+  # ช่วงติดตั้งจบไปแล้ว รหัสติดตั้งจึงไม่มีความหมาย ไม่ต้องแสดงให้สับสน
+  $isFresh = -not (Test-Path (Join-Path $dataDir 'dbconfig.json'))
+  $setupToken = New-SetupToken
   $compose = @"
 # NDP Kit - ไฟล์นี้สร้างอัตโนมัติโดยตัวช่วยติดตั้ง
 services:
@@ -200,11 +216,12 @@ services:
       - "`${APP_PORT:-3000}:3000"
     environment:
       - TZ=Asia/Bangkok
+      - SETUP_TOKEN=`${SETUP_TOKEN:-}
     volumes:
       - ./data:/app/data
 "@
   Set-Content (Join-Path $dir 'docker-compose.yml') $compose -Encoding UTF8
-  Set-Content (Join-Path $dir '.env') "APP_PORT=$port" -Encoding UTF8
+  Set-Content (Join-Path $dir '.env') @("APP_PORT=$port", "SETUP_TOKEN=$setupToken") -Encoding UTF8
   Save-State
   Ok 'สร้าง docker-compose.yml และ .env แล้ว'
   Step 'ค่าตั้งค่าของหน่วยบริการเก็บในโฟลเดอร์ data (อัปเดตกี่ครั้งก็ไม่หาย)'
@@ -241,6 +258,13 @@ services:
   Write-Host ''
   Write-Host '  สิ่งที่ต้องทำต่อ' -ForegroundColor White
   Step '1. เปิดหน้าเว็บด้านบน แล้วไปเมนู "ตั้งค่าการเชื่อมต่อ"'
+  if ($isFresh) {
+    Write-Host ''
+    Write-Host "     รหัสติดตั้งครั้งแรก : $($setupToken.Substring(0,4))-$($setupToken.Substring(4))" -ForegroundColor Cyan
+    Write-Host '     กรอกรหัสนี้ในหน้าตั้งค่า เพื่อยืนยันว่าคุณคือผู้ติดตั้ง' -ForegroundColor DarkGray
+    Write-Host '     (กันคนอื่นในวง LAN ชิงตั้งค่าก่อน - ใช้ได้จนกว่าจะบันทึกสำเร็จ)' -ForegroundColor DarkGray
+    Write-Host ''
+  }
   Step '2. กรอกข้อมูล MySQL ของ HOSxP แล้วกด Save Config และ Test Connection'
   Write-Host '     *** ถ้า MySQL อยู่เครื่องเดียวกับ Docker ให้ใส่ host เป็น' -ForegroundColor Yellow
   Write-Host '         host.docker.internal แทน localhost ***' -ForegroundColor Yellow

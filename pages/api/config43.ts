@@ -2,14 +2,15 @@ import { NextApiRequest, NextApiResponse } from "next";
 import fs from "fs/promises";
 import path from "path";
 import { parseDbConfig43, readStoredConfig43 } from "../../lib/db43";
-import { isConfigAccessAllowed } from "../../lib/authGuard";
+import { checkConfigAccess } from "../../lib/authGuard";
 import { writeSecretJsonFile } from "../../lib/configSecurity";
 
 const configPath = path.join(process.cwd(), "data", "dbconfig43.json");
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!isConfigAccessAllowed(req)) {
-    return res.status(401).json({ error: "กรุณาเข้าสู่ระบบ" });
+  const access = checkConfigAccess(req);
+  if (!access.ok) {
+    return res.status(access.status).json({ error: access.error });
   }
 
   if (req.method === "GET") {

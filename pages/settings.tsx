@@ -19,12 +19,22 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   // ช่วงติดตั้งครั้งแรก (ยังไม่มี dbconfig.json) เปิดให้เข้าได้โดยไม่ต้อง login
   // เพื่อตั้งค่า DB — เมื่อตั้งค่าเสร็จแล้วต้องมี session ถึงจะเข้าหน้านี้ได้
   const session = getSession(context.req);
-  if (!session && !isBootstrapPhase()) {
+  const bootstrap = isBootstrapPhase();
+  if (!session && !bootstrap) {
     return { redirect: { destination: "/login", permanent: false } };
   }
   const hospitalName = await getHospitalName();
   const nhsoStatus = getNhsoConfigStatus();
-  return { props: { hospitalName, nhsoStatus, loginname: session?.loginname ?? null } };
+  return {
+    props: {
+      hospitalName,
+      nhsoStatus,
+      loginname: session?.loginname ?? null,
+      // หน้านี้เปิดให้เข้าได้ตอนยังไม่เคยตั้งค่า แต่การบันทึก/ทดสอบจะต้องแนบ
+      // รหัสติดตั้งครั้งแรกไปด้วยเสมอ (ดู lib/authGuard.ts)
+      needsSetupToken: !session && bootstrap,
+    },
+  };
 };
 
 type NhsoStatus = { env: string; items: NhsoConfigItem[]; ready: boolean };
@@ -41,11 +51,14 @@ export default function Settings({
   hospitalName,
   nhsoStatus,
   loginname,
+  needsSetupToken,
 }: {
   hospitalName: string;
   nhsoStatus: NhsoStatus;
   loginname: string | null;
+  needsSetupToken: boolean;
 }) {
+  const [setupToken, setSetupToken] = useState("");
   const [config, setConfig] = useState<Config>({
     host: "localhost",
     port: 3306,
@@ -68,9 +81,29 @@ export default function Settings({
   const [activeTab, setActiveTab] = useState<"main" | "file43" | "nhso">("main");
 
   useEffect(() => {
+    // ช่วงติดตั้งครั้งแรกยังไม่มีค่าอะไรให้โหลด และคำขอจะถูกปฏิเสธเพราะยังไม่ได้
+    // กรอกรหัส จึงข้ามไปเลยไม่ให้ขึ้นข้อความผิดพลาดค้างหน้าจอตั้งแต่เปิดหน้ามา
+    if (needsSetupToken) return;
     fetchConfig();
     fetchConfig43();
-  }, []);
+  }, [needsSetupToken]);
+
+  // แนบรหัสติดตั้งไปกับทุกคำขอเฉพาะช่วงติดตั้งครั้งแรก หลังจากนั้นใช้ session ตามปกติ
+  function requestHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (needsSetupToken && setupToken.trim()) headers["x-setup-token"] = setupToken.trim();
+    return headers;
+  }
+
+  // กันไว้ฝั่งหน้าเว็บก่อน ไม่ให้การกดปุ่มทั้งที่ยังไม่กรอกรหัสไปนับรวมกับ
+  // จำนวนครั้งที่ใส่รหัสผิด (ฝั่งเซิร์ฟเวอร์ล็อก 15 นาทีเมื่อผิดครบ 10 ครั้ง)
+  function missingSetupToken(): boolean {
+    if (needsSetupToken && !setupToken.trim()) {
+      showToast("กรุณากรอกรหัสติดตั้งครั้งแรกก่อน", "error");
+      return true;
+    }
+    return false;
+  }
 
   // แจ้งเตือนแบบ toast แล้วหายเองใน 4 วินาที
   function showToast(text: string, type: "success" | "error") {
@@ -103,12 +136,13 @@ export default function Settings({
       showToast(validationError, "error");
       return;
     }
+    if (missingSetupToken()) return;
 
     setSavingConfig(true);
     try {
       const res = await fetch("/api/config", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: requestHeaders(),
         body: JSON.stringify(config),
       });
       const data = await res.json();
@@ -130,12 +164,13 @@ export default function Settings({
       showToast(validationError, "error");
       return;
     }
+    if (missingSetupToken()) return;
 
     setTestingConnection(true);
     try {
       const res = await fetch("/api/test-connection", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: requestHeaders(),
         body: JSON.stringify(config),
       });
       const data = await res.json();
@@ -169,12 +204,13 @@ export default function Settings({
       showToast(validationError, "error");
       return;
     }
+    if (missingSetupToken()) return;
 
     setSavingConfig43(true);
     try {
       const res = await fetch("/api/config43", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: requestHeaders(),
         body: JSON.stringify(config43),
       });
       const data = await res.json();
@@ -196,12 +232,13 @@ export default function Settings({
       showToast(validationError, "error");
       return;
     }
+    if (missingSetupToken()) return;
 
     setTestingConnection43(true);
     try {
       const res = await fetch("/api/test-connection43", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: requestHeaders(),
         body: JSON.stringify(config43),
       });
       const data = await res.json();
@@ -223,6 +260,28 @@ export default function Settings({
         <div className="brand" style={{ marginBottom: 20 }}>
           <h1 className="page-title" style={{ marginBottom: 0 }}>ตั้งค่าการเชื่อมต่อ</h1>
         </div>
+
+        {needsSetupToken ? (
+          <div className="add-item-card" style={{ maxWidth: 560, marginBottom: 20 }}>
+            <h2 className="section-title" style={{ marginTop: 0 }}>ตั้งค่าครั้งแรก</h2>
+            <p style={{ marginTop: 0, color: "var(--muted)" }}>
+              เครื่องนี้ยังไม่เคยตั้งค่าฐานข้อมูล จึงยังเข้าสู่ระบบไม่ได้ —
+              กรอกรหัสที่แสดงบนหน้าจอตัวช่วยติดตั้งเพื่อยืนยันว่าคุณคือผู้ติดตั้ง
+              เมื่อบันทึกการตั้งค่าสำเร็จ รหัสนี้จะใช้ไม่ได้อีก
+            </p>
+            <div className="label-group">
+              <label>รหัสติดตั้งครั้งแรก</label>
+              <input
+                className="input-field"
+                value={setupToken}
+                placeholder="เช่น ABCD-2345"
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(e) => setSetupToken(e.target.value)}
+              />
+            </div>
+          </div>
+        ) : null}
 
         <div className="tabs">
           <button className={`tab ${activeTab === "main" ? "active" : ""}`} onClick={() => setActiveTab("main")}>

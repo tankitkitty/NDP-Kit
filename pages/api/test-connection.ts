@@ -1,12 +1,13 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import mysql from "mysql2/promise";
 import { parseDbConfig, readStoredConfig } from "../../lib/db";
-import { isConfigAccessAllowed } from "../../lib/authGuard";
+import { checkConfigAccess } from "../../lib/authGuard";
 import { canReuseStoredPassword } from "../../lib/configSecurity";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!isConfigAccessAllowed(req)) {
-    return res.status(401).json({ error: "กรุณาเข้าสู่ระบบ" });
+  const access = checkConfigAccess(req);
+  if (!access.ok) {
+    return res.status(access.status).json({ error: access.error });
   }
 
   if (req.method !== "POST") {
