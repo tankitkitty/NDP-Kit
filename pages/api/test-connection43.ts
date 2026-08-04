@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import mysql from "mysql2/promise";
 import { parseDbConfig43, readStoredConfig43 } from "../../lib/db43";
 import { isConfigAccessAllowed } from "../../lib/authGuard";
+import { canReuseStoredPassword } from "../../lib/configSecurity";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!isConfigAccessAllowed(req)) {
@@ -22,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (!config.password) {
     const stored = readStoredConfig43();
-    if (stored?.password) {
+    if (stored?.password && canReuseStoredPassword(stored, config)) {
       config.password = stored.password;
     }
   }

@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import { parseDbConfig43, readStoredConfig43 } from "../../lib/db43";
 import { isConfigAccessAllowed } from "../../lib/authGuard";
+import { writeSecretJsonFile } from "../../lib/configSecurity";
 
 const configPath = path.join(process.cwd(), "data", "dbconfig43.json");
 
@@ -39,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
       await fs.mkdir(path.dirname(configPath), { recursive: true });
-      await fs.writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
+      await writeSecretJsonFile(configPath, config);
       return res.status(200).json({ message: "บันทึกการตั้งค่าฐานข้อมูล 43 แฟ้มสำเร็จ" });
     } catch (error) {
       return res.status(500).json({ error: "ไม่สามารถบันทึกการตั้งค่าได้" });

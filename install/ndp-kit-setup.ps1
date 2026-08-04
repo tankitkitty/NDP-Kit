@@ -126,11 +126,15 @@ function Invoke-Install {
   Head 'ขั้นตอนที่ 1/5 : ตรวจสอบ Docker'
   if (-not (Ensure-Docker)) { Pause-Back; return }
 
-  Head 'ขั้นตอนที่ 2/5 : เลือกที่เก็บโปรแกรม'
-  $suggest = if ($State.dir) { $State.dir } else { $DEFAULT_DIR }
-  Step "กด Enter เพื่อใช้ : $suggest"
-  $dir = Read-Host '  หรือพิมพ์ตำแหน่งที่ต้องการ'
-  if ([string]::IsNullOrWhiteSpace($dir)) { $dir = $suggest }
+  Head 'ขั้นตอนที่ 2/5 : เตรียมที่เก็บโปรแกรม'
+  # ไม่ถามผู้ใช้แล้ว - ลงที่ C:\NDPKit เสมอ เพื่อให้ทุกหน่วยบริการอยู่ตำแหน่งเดียวกัน
+  # เวลาช่วยแก้ปัญหาทางโทรศัพท์จะได้ไม่ต้องไล่ถามว่าเครื่องนี้ลงไว้ตรงไหน
+  #
+  # ค่าที่จำไว้รอบก่อนจะใช้ต่อเฉพาะเมื่อเป็นพาธเต็มเท่านั้น เพราะของเดิมเคยเก็บ
+  # ค่าอย่าง "." ได้ ทำให้ไฟล์ของโปรแกรมไปกองอยู่ในโฟลเดอร์ที่บังเอิญเปิดอยู่
+  # ตอนนั้น แล้วครั้งต่อไปก็ถูกเสนอค่านั้นซ้ำอีก
+  $dir = if ($State.dir -and [System.IO.Path]::IsPathRooted($State.dir)) { $State.dir } else { $DEFAULT_DIR }
+  Step "ที่เก็บโปรแกรม : $dir"
   try {
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
   } catch {
