@@ -3,9 +3,9 @@ import { getSession } from "../../lib/session";
 import { getHospitalInfo } from "../../lib/db";
 import {
   getAppVersion,
-  hasAnswered,
   isRegistryEnabled,
   markAnswered,
+  readAnswered,
   sendToRegistry,
 } from "../../lib/registry";
 
@@ -21,33 +21,72 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === "GET") {
-    if (hasAnswered()) return res.status(200).json({ shouldAsk: false });
-    const info = await getHospitalInfo();
-    return res.status(200).json({
-      shouldAsk: true,
-      preview: {
-        hospitalCode: info.code,
-        hospitalName: info.name,
-        version: getAppVersion(),
-      },
-    });
+    const answered = readAnswered();
+    const version = getAppVersion();
+
+    if (!answered) {
+      const info = await getHospitalInfo();
+      return res.status(200).json({
+        shouldAsk: true,
+        preview: {
+          hospitalCode: info.code,
+          hospitalName: info.name,
+          version,
+        },
+      });
+    }
+
+    // เคยยินยอมไว้แล้วและเพิ่งอัปเดตเป็นเวอร์ชันใหม่ → ส่งข้อมูลชุดเดิมซ้ำเงียบๆ
+    // เพื่อให้คอลัมน์เวอร์ชันในชีตตรงกับความจริงเสมอ ไม่ต้องถามผู้ใช้ซ้ำเพราะ
+    // เป็นข้อมูลชุดเดียวกับที่เคยอนุญาตไปแล้ว ไม่ได้เพิ่มอะไรใหม่
+    // ถ้าเคยปฏิเสธ (sent = false) จะไม่ส่งอะไรอีกเลยตลอดไป
+    if (answered.sent && version && answered.version !== version) {
+      try {
+        const info = await getHospitalInfo();
+        // ไม่มีรหัสสถานพยาบาล (ฐานข้อมูลล่ม หรือ opdconfig ไม่มีค่า) ให้ข้ามไปก่อน
+        // ถ้าส่งไปทั้งที่รหัสว่าง แถวนั้นจะไปทับกับหน่วยอื่นที่รหัสว่างเหมือนกัน
+        // เพราะสคริปต์ฝั่งชีตใช้รหัสเป็นตัวเทียบว่าเป็นหน่วยเดียวกันหรือไม่
+        if (!info.code) {
+          return res.status(200).json({ shouldAsk: false });
+        }
+        await sendToRegistry({
+          hospitalCode: info.code,
+          hospitalName: info.name,
+          version,
+          sentAt: new Date().toISOString(),
+        });
+        markAnswered(true, version);
+      } catch {
+        // ส่งไม่ได้ก็ไม่บันทึกเวอร์ชัน จะได้ลองใหม่คราวหน้าที่เปิดโปรแกรม
+      }
+    }
+
+    return res.status(200).json({ shouldAsk: false });
   }
 
   if (req.method === "POST") {
+    const version = getAppVersion();
+
     if (req.body?.consent !== true) {
-      markAnswered(false);
+      markAnswered(false, version);
       return res.status(200).json({ message: "รับทราบ จะไม่ถามอีก" });
     }
 
     const info = await getHospitalInfo();
+    if (!info.code) {
+      return res.status(400).json({
+        error:
+          "ไม่พบรหัสสถานพยาบาลในฐานข้อมูล (ตาราง opdconfig) กรุณาตรวจสอบการเชื่อมต่อฐานข้อมูลก่อน",
+      });
+    }
     try {
       await sendToRegistry({
         hospitalCode: info.code,
         hospitalName: info.name,
-        version: getAppVersion(),
+        version,
         sentAt: new Date().toISOString(),
       });
-      markAnswered(true);
+      markAnswered(true, version);
       return res.status(200).json({ message: "ส่งข้อมูลลงทะเบียนเรียบร้อย ขอบคุณครับ" });
     } catch (error: any) {
       // ไม่บันทึกว่าตอบแล้ว เพื่อให้กดส่งซ้ำได้เมื่อเน็ตกลับมา

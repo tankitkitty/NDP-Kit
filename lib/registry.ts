@@ -9,7 +9,8 @@ import path from "path";
  *
  * ตั้งผ่าน env REGISTRY_URL ทับได้ เผื่ออยากเปลี่ยนปลายทางโดยไม่ต้อง build ใหม่
  */
-const DEFAULT_REGISTRY_URL = "";
+const DEFAULT_REGISTRY_URL =
+  "https://script.google.com/macros/s/AKfycbxOeSV5w3ezb1jR2l34EkS9cqcvyHCqzJiV7kZ_UNa_lk6szNY3xtWkpn3ZHTJZC35Z/exec";
 
 export const REGISTRY_URL = (process.env.REGISTRY_URL || DEFAULT_REGISTRY_URL).trim();
 
@@ -21,16 +22,33 @@ export function isRegistryEnabled(): boolean {
   return REGISTRY_URL.length > 0;
 }
 
-export function hasAnswered(): boolean {
-  return fs.existsSync(answeredPath);
+export type AnsweredRecord = {
+  /** ผู้ใช้กดยินยอมให้ส่งหรือไม่ — ถ้าปฏิเสธจะไม่ส่งอะไรอีกเลย */
+  sent: boolean;
+  at: string;
+  /** เวอร์ชันที่รายงานไปแล้วล่าสุด ใช้ดูว่าต้องส่งอัปเดตซ้ำไหม */
+  version?: string;
+};
+
+export function readAnswered(): AnsweredRecord | null {
+  try {
+    if (!fs.existsSync(answeredPath)) return null;
+    return JSON.parse(fs.readFileSync(answeredPath, "utf-8")) as AnsweredRecord;
+  } catch {
+    return null;
+  }
 }
 
-export function markAnswered(sent: boolean): void {
+export function hasAnswered(): boolean {
+  return readAnswered() !== null;
+}
+
+export function markAnswered(sent: boolean, version: string): void {
   try {
     fs.mkdirSync(path.dirname(answeredPath), { recursive: true });
     fs.writeFileSync(
       answeredPath,
-      JSON.stringify({ sent, at: new Date().toISOString() }, null, 2),
+      JSON.stringify({ sent, at: new Date().toISOString(), version }, null, 2),
       { encoding: "utf-8", mode: 0o600 }
     );
   } catch {

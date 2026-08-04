@@ -3,6 +3,14 @@
 เมื่อหน่วยบริการตั้งค่าฐานข้อมูลเสร็จ โปรแกรมจะถามครั้งเดียวว่าต้องการส่งข้อมูล
 มาลงทะเบียนไหม ถ้ากดยินยอมจะส่งมาที่ Google Sheet ของเรา
 
+**ส่งซ้ำเมื่อไหร่:** หลังจากยินยอมครั้งแรกแล้ว โปรแกรมจะส่งข้อมูลชุดเดิมซ้ำ
+**เฉพาะตอนที่อัปเดตเป็นเวอร์ชันใหม่** เพื่อให้คอลัมน์เวอร์ชันในชีตตรงกับความจริงเสมอ
+(ไม่งั้นจะค้างอยู่ที่เวอร์ชันตอนลงทะเบียนครั้งแรกตลอดไป) การส่งซ้ำนี้เงียบสนิท
+ไม่ถามผู้ใช้อีกเพราะเป็นข้อมูลชุดเดียวกับที่อนุญาตไปแล้ว และสคริปต์ฝั่งชีตจะ
+ทับแถวเดิมด้วยรหัสสถานพยาบาล จึงไม่เกิดแถวซ้ำ
+
+**ถ้าผู้ใช้กด "ไม่ส่ง"** จะไม่ส่งอะไรออกไปอีกเลยตลอดไป ไม่ว่าจะอัปเดตกี่ครั้งก็ตาม
+
 **ข้อมูลที่ส่ง** — มีเท่านี้ ไม่มีข้อมูลผู้ป่วยหรือข้อมูลส่วนบุคคลใดๆ
 
 | ฟิลด์ | ที่มา |
@@ -36,6 +44,8 @@ Google Sheet รับ POST ตรงๆ ไม่ได้ ต้องมี A
 6. คัดลอก URL ที่ได้ (ลงท้ายด้วย `/exec`) ไปใส่ในไฟล์ `lib/registry.ts`
    ที่ตัวแปร `DEFAULT_REGISTRY_URL`
 
+> **ตั้งค่าไว้แล้ว** ตั้งแต่ v2.0.1 — ทำซ้ำเฉพาะตอนต้องการเปลี่ยนไปใช้ชีตอื่น
+
 ---
 
 ## โค้ดที่ต้องวางใน Apps Script
@@ -46,6 +56,7 @@ Google Sheet รับ POST ตรงๆ ไม่ได้ ต้องมี A
 
 const SHEET_NAME = 'ทะเบียนหน่วยบริการ';
 const HEADERS = ['วันเวลาที่รับ', 'รหัสสถานพยาบาล', 'ชื่อสถานพยาบาล', 'เวอร์ชัน', 'วันเวลาที่ส่ง'];
+const DATE_FORMAT = 'yyyy-mm-dd hh:mm:ss';
 
 function getSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -56,30 +67,80 @@ function getSheet_() {
     sh.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold');
     sh.setFrozenRows(1);
   }
+
   return sh;
+}
+
+/**
+ * ตัดศูนย์นำหน้าออกก่อนเทียบ เพื่อให้ "01234" กับ 1234 ถือเป็นหน่วยเดียวกัน
+ * ใช้เฉพาะตอนเทียบว่าเป็นแถวเดิมไหม ส่วนค่าที่เก็บลงชีตยังเป็นรหัสเต็มเสมอ
+ */
+function normalizeCode_(value) {
+  return String(value == null ? '' : value).trim().replace(/^0+/, '');
+}
+
+/** แปลงข้อความเวลาแบบ ISO ให้เป็นวันที่จริง เพื่อให้ชีตแสดงผลอ่านง่ายและเรียง/กรองได้ */
+function toDate_(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? value : d;
+}
+
+/**
+ * เขียนหนึ่งแถว โดยตั้งรูปแบบของแถวนั้นให้เรียบร้อยก่อนเสมอ
+ *
+ * คอลัมน์รหัสสถานพยาบาลต้องเป็น "ข้อความล้วน" (@) ไม่งั้น Sheets จะแปลง 01234
+ * เป็นตัวเลข 1234 แล้วศูนย์นำหน้าหายไป ซึ่งนอกจากข้อมูลผิดแล้วยังทำให้การทับแถวเดิม
+ * พังด้วย เพราะรอบถัดไปเทียบ "01234" กับ "1234" ไม่ตรงกัน เลยเพิ่มแถวซ้ำไปเรื่อยๆ
+ *
+ * ต้องมี flush() คั่นกลาง เพราะ Apps Script รวบคำสั่งไปทำทีเดียวตอนจบ ถ้าไม่บังคับ
+ * ให้รูปแบบมีผลก่อน ค่าจะถูกเขียนลงไปตั้งแต่ตอนที่ช่องยังเป็นรูปแบบอัตโนมัติอยู่
+ */
+function writeRow_(sh, rowIndex, row) {
+  const range = sh.getRange(rowIndex, 1, 1, row.length);
+  range.setNumberFormats([[DATE_FORMAT, '@', '@', '@', DATE_FORMAT]]);
+  SpreadsheetApp.flush();
+  range.setValues([row]);
+}
+
+// เปิด URL นี้ในเบราว์เซอร์จะเห็นข้อความนี้ แทน error ว่า "ไม่พบฟังก์ชันของสคริปต์: doGet"
+// ตัวโปรแกรมใช้ doPost เท่านั้น ฟังก์ชันนี้มีไว้กันสับสนตอนคนเปิดดูเฉยๆ
+function doGet() {
+  return ContentService
+    .createTextOutput('NDP Kit registry: พร้อมรับข้อมูล (ใช้ POST เท่านั้น)')
+    .setMimeType(ContentService.MimeType.TEXT);
 }
 
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     const code = String(data.hospitalCode || '').trim();
-    const row = [new Date(), code, data.hospitalName || '', data.version || '', data.sentAt || ''];
+    const row = [
+      new Date(),
+      code,
+      data.hospitalName || '',
+      data.version || '',
+      toDate_(data.sentAt)
+    ];
 
     const sh = getSheet_();
 
     // หน่วยบริการเดิมส่งมาอีก (เช่น อัปเดตเวอร์ชัน) ให้ทับแถวเดิม
+    //
+    // เทียบด้วย normalizeCode_ เพื่อให้แถวเก่าที่เคยถูกเก็บเป็นตัวเลข (ศูนย์นำหน้าหาย
+    // ไปแล้ว) ยังจับคู่กับรหัสจริงได้ ไม่งั้นจะเกิดแถวซ้ำไปตลอดและแก้ย้อนหลังไม่ได้
     let updated = false;
     if (code) {
       const values = sh.getDataRange().getValues();
       for (let i = 1; i < values.length; i++) {
-        if (String(values[i][1]).trim() === code) {
-          sh.getRange(i + 1, 1, 1, row.length).setValues([row]);
+        if (normalizeCode_(values[i][1]) === normalizeCode_(code)) {
+          writeRow_(sh, i + 1, row);
           updated = true;
           break;
         }
       }
     }
-    if (!updated) sh.appendRow(row);
+    if (!updated) writeRow_(sh, sh.getLastRow() + 1, row);
 
     return ContentService
       .createTextOutput(JSON.stringify({ ok: true, updated: updated }))
