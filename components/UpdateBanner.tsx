@@ -25,6 +25,7 @@ export default function UpdateBanner() {
   const [stepIndex, setStepIndex] = useState(-1);
   const [elapsed, setElapsed] = useState(0);
   const [failed, setFailed] = useState(false);
+  const [startError, setStartError] = useState("");
   const startedAt = useRef(0);
 
   useEffect(() => {
@@ -66,11 +67,22 @@ export default function UpdateBanner() {
     startedAt.current = Date.now();
     setStepIndex(0);
     setFailed(false);
+    setStartError("");
 
+    // ต้องตรวจผลของคำสั่งเริ่มอัปเดตด้วย ถ้าเซิร์ฟเวอร์เริ่มให้ไม่ได้ (เช่นเขียนไฟล์
+    // สคริปต์ไม่ได้ หรือเปิด PowerShell ไม่ได้) แล้วเราไม่ดูผลลัพธ์ หน้าเว็บจะค้าง
+    // อยู่ที่ "ขั้นที่ 1" ตลอดไปโดยไม่บอกสาเหตุอะไรเลย
     try {
-      await fetch("/api/update", { method: "POST" });
+      const res = await fetch("/api/update", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setStartError(data.error || "เริ่มอัปเดตไม่สำเร็จ");
+        setStepIndex(-1);
+        return;
+      }
     } catch {
       // คำขอขาดกลางคันเป็นเรื่องปกติ เพราะเซิร์ฟเวอร์ถูกปิดระหว่างอัปเดต
+      // จึงไม่ถือเป็นความล้มเหลว ปล่อยให้ขั้นตอนถามสถานะทำงานต่อ
     }
 
     // ถามสถานะทุก 2 วินาที ระหว่างที่เซิร์ฟเวอร์ยังตอบได้
@@ -122,6 +134,11 @@ export default function UpdateBanner() {
             ใช้เวลาราวหนึ่งนาที <strong>ค่าตั้งค่าทั้งหมดไม่หาย</strong>
             ถ้าอัปเดตล้มเหลวระบบจะย้อนกลับเป็นเวอร์ชันเดิมให้เอง ควรทำตอนไม่มีคนใช้งาน
           </p>
+          {startError ? (
+            <p style={{ color: "#b42318", marginTop: 0 }}>
+              {startError} — ลองใหม่อีกครั้ง ถ้ายังไม่ได้ให้รันตัวช่วยติดตั้งแล้วเลือกเมนู 1 แทน
+            </p>
+          ) : null}
           <div className="toolbar">
             <button className="button-primary" onClick={runUpdate}>
               อัปเดตเป็น {info.latest}
@@ -173,6 +190,15 @@ export default function UpdateBanner() {
                     ? `ผ่านไป ${elapsed} วินาที — ความเร็วขึ้นกับอินเทอร์เน็ตของหน่วยบริการ ระหว่างนี้ยังใช้งานโปรแกรมได้ตามปกติ`
                     : `ผ่านไป ${elapsed} วินาที — โปรแกรมกำลังปิดและเปิดใหม่ หน้าเว็บจะกลับมาเองอัตโนมัติ อย่าเพิ่งปิดหน้านี้`}
               </p>
+              {/* ค้างนานผิดปกติ ต้องบอกทางออกไว้ ไม่ปล่อยให้ผู้ใช้เดาว่าควรทำอะไรต่อ */}
+              {!finished && elapsed > 180 ? (
+                <p style={{ marginTop: 0, color: "var(--muted)" }}>
+                  ใช้เวลานานกว่าปกติ อาจเป็นเพราะอินเทอร์เน็ตช้าหรือถูกกันไว้ —
+                  ดูรายละเอียดได้ที่ <code>logs\update.log</code> ในโฟลเดอร์โปรแกรม
+                  หรือเมนู 3 ของตัวช่วยติดตั้ง ถ้าไม่คืบหน้าให้อัปเดตผ่านตัวช่วยติดตั้งแทน
+                  โดยกดเมนู 1 (ปลอดภัย ไฟล์เดิมยังอยู่ครบ)
+                </p>
+              ) : null}
             </>
           )}
         </>
