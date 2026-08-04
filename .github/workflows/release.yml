@@ -1,0 +1,55 @@
+# สร้างแพ็กเกจสำเร็จรูปทุกครั้งที่ push tag เวอร์ชัน (v1.2.3)
+# แล้วแนบไปกับ GitHub Release ให้ตัวช่วยติดตั้งดาวน์โหลดไปใช้
+#
+# ชื่อไฟล์แนบตั้งเป็น ndp-kit.zip คงที่ ไม่ใส่เลขเวอร์ชัน เพื่อให้ตัวช่วยติดตั้ง
+# ใช้ URL เดียวได้ตลอดโดยไม่ต้องเรียก API ถามว่าเวอร์ชันล่าสุดคืออะไร:
+#   https://github.com/tankitkitty/NDP-Kit/releases/latest/download/ndp-kit.zip
+# เลขเวอร์ชันจริงอยู่ในไฟล์ version.txt ข้างใน zip
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # ต้องตรงกับ $NODE_VER ใน install/ndp-kit-setup.ps1 เพื่อให้เวอร์ชันที่ใช้ build
+      # กับที่หน่วยบริการใช้รันเป็นตัวเดียวกัน
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: build แบบ standalone
+        run: npm run build
+        env:
+          NEXT_OUTPUT: standalone
+
+      # Next.js standalone ไม่ได้ก๊อป .next/static กับ public มาให้ในตัว
+      # ต้องประกอบเองตามที่เอกสาร Next.js กำหนด ไม่งั้นหน้าเว็บจะไม่มี CSS/รูป
+      - name: ประกอบแพ็กเกจ
+        run: |
+          mkdir -p package
+          cp -r .next/standalone/. package/
+          mkdir -p package/.next
+          cp -r .next/static package/.next/static
+          if [ -d public ]; then cp -r public package/public; fi
+          echo "${GITHUB_REF_NAME}" > package/version.txt
+
+      - name: บีบอัด
+        run: cd package && zip -qr ../ndp-kit.zip .
+
+      - name: แนบไปกับ release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ndp-kit.zip
+          generate_release_notes: true

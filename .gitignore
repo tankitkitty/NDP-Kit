@@ -13,6 +13,9 @@ yarn-error.log*
 dbconfig.json
 dbconfig43.json
 .session-secret
+.setup-token
+.registered
 
-# ไฟล์ที่ตัวช่วยติดตั้งสร้างเองตอนรัน ไม่ใช่ซอร์ส
-install/docker-compose.yml
+# ไฟล์ที่ตัวช่วยติดตั้ง/ผู้ดูแลวางไว้ข้างสคริปต์สำหรับติดตั้งแบบออฟไลน์
+install/ndp-kit.zip
+install/node-*-win-x64.zip

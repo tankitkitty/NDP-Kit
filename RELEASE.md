@@ -6,14 +6,18 @@
 > **แนวคิดสำคัญ:** หน่วยบริการดึงโค้ดตาม **git tag** (เช่น `v1.0.0`, `v1.1.0`) ไม่ใช่ branch `master`
 > ดังนั้นทุกครั้งที่จะปล่อยของใหม่ ต้อง (1) commit → (2) ตั้ง tag เวอร์ชันใหม่ → (3) push ทั้ง commit และ tag
 >
-> **Docker image อัตโนมัติ:** เมื่อ push tag `v*` ขึ้น GitHub, workflow `.github/workflows/docker-release.yml`
-> จะ build image แล้วเผยแพร่ที่ `ghcr.io/tankitkitty/ndp-kit` (tag: `latest`, `1.1.0`, `1.1`) ให้เอง —
-> หน่วยบริการที่ติดตั้งแบบ Docker แค่รัน `docker compose pull && docker compose up -d` ก็ได้เวอร์ชันใหม่
+> **แพ็กเกจอัตโนมัติ:** เมื่อ push tag `v*` ขึ้น GitHub, workflow `.github/workflows/release.yml`
+> จะ build แบบ standalone แล้วแนบไฟล์ `ndp-kit.zip` ไปกับ GitHub Release ให้เอง —
+> ตัวช่วยติดตั้งฝั่งหน่วยบริการดึงจาก URL คงที่นี้เสมอ ไม่ต้องแก้อะไรตามเวอร์ชัน:
+> `https://github.com/tankitkitty/NDP-Kit/releases/latest/download/ndp-kit.zip`
 >
-> **visibility ของ image:** ตรวจกับของจริงแล้วตอนปล่อย v1.1.0 — GitHub ตั้ง package เป็น **Public ให้อัตโนมัติ**
-> เพราะ repo นี้เป็น public หน่วยบริการจึง `docker pull` ได้ทันทีโดยไม่ต้อง login (ไม่ต้องทำอะไรเพิ่ม)
-> ถ้าวันหนึ่งหน่วยบริการ pull แล้วขึ้น `unauthorized` ค่อยไปตั้งเองที่ repo → Packages → `ndp-kit` →
-> Package settings → Change visibility → Public
+> **ชื่อไฟล์แนบต้องเป็น `ndp-kit.zip` เท่านั้น** ห้ามใส่เลขเวอร์ชันในชื่อไฟล์ ไม่งั้น URL
+> `releases/latest/download/...` จะหาไฟล์ไม่เจอ แล้วตัวช่วยติดตั้งของทุกหน่วยบริการจะพังพร้อมกัน
+> เลขเวอร์ชันจริงอยู่ในไฟล์ `version.txt` ข้างใน zip ซึ่งเมนู 3 ของตัวช่วยเอามาแสดง
+>
+> **เวอร์ชัน Node ต้องตรงกันสองที่:** `node-version` ใน `release.yml` กับ `$NODE_VER` ใน
+> `install/ndp-kit-setup.ps1` (ปัจจุบันคือ 24 / `v24.19.0`) เพื่อให้เวอร์ชันตอน build
+> กับตอนที่หน่วยบริการใช้รันเป็นตัวเดียวกัน
 
 ---
 
@@ -118,19 +122,17 @@ git push origin master --tags
 
 ## 5. หน่วยบริการอัปเดตยังไง (แจ้งให้ผู้ใช้ทำ)
 
-เมื่อคุณ push เวอร์ชันใหม่แล้ว แจ้งหน่วยบริการให้รันคำสั่งนี้บนเครื่องที่ติดตั้งไว้:
+เมื่อคุณ push tag ใหม่และ workflow แนบ `ndp-kit.zip` เรียบร้อยแล้ว แจ้งหน่วยบริการแค่ว่า
 
-```bash
-cd ndp-kit
-git fetch --tags
-git checkout v1.1.0     # เปลี่ยนเป็นเวอร์ชันใหม่ล่าสุด
-npm install             # เผื่อมี dependency ใหม่
-npm run build
-# แล้ว restart โปรแกรม (npm run start)
-```
+> รันตัวช่วยติดตั้ง (`ndp-kit-setup.bat`) แล้วเลือกเมนู **`[1]`** อีกครั้ง
 
-> ข้อมูลตั้งค่าของแต่ละหน่วย (`data/dbconfig.json`, `.env.local`, `data/.session-secret`)
-> อยู่นอก git จึง **ไม่หาย** เวลาอัปเดต — ไม่ต้องตั้งค่าใหม่
+เท่านั้น ตัวช่วยจะดึงเวอร์ชันล่าสุดมาแทนที่ให้เอง ไม่ต้องใช้ git หรือ npm บนเครื่องหน่วยบริการเลย
+
+> ค่าตั้งค่าของแต่ละหน่วย (`data/dbconfig.json`, `data/dbconfig43.json`, `data/.session-secret`)
+> ถูกยกออกมาพักไว้ก่อนวางไฟล์ใหม่แล้วคืนกลับ จึง **ไม่หาย** เวลาอัปเดต — ไม่ต้องตั้งค่าใหม่
+>
+> **ตรวจก่อนแจ้งทุกครั้ง:** เปิดหน้า Releases ดูว่ามีไฟล์ `ndp-kit.zip` แนบมาจริง
+> ถ้า workflow ล้มเหลว tag จะถูกสร้างแต่ไม่มีไฟล์แนบ แล้วตัวช่วยติดตั้งจะดาวน์โหลดไม่สำเร็จ
 
 ---
 

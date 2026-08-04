@@ -111,6 +111,15 @@ export async function getHospitalName(): Promise<string> {
   }
 }
 
+export async function getHospitalInfo(): Promise<{ code: string; name: string }> {
+  try {
+    const rows: any = await query("SELECT hospitalcode, hospitalname FROM opdconfig LIMIT 1");
+    return { code: rows[0]?.hospitalcode || "", name: rows[0]?.hospitalname || "" };
+  } catch {
+    return { code: "", name: "" };
+  }
+}
+
 export async function initializeDatabase() {
   await query(`
     CREATE TABLE IF NOT EXISTS items (

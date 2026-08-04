@@ -1,61 +1,43 @@
-﻿# =========================================================================
-#  NDP Kit - ตัวช่วยติดตั้ง/อัปเดต สำหรับหน่วยบริการ
-#  เรียกใช้ผ่าน ndp-kit-setup.bat (ดับเบิลคลิกไฟล์ .bat)
+﻿# =============================================================================
+#  NDP Kit - ตัวช่วยติดตั้งสำหรับหน่วยบริการ (รันด้วย Node.js ไม่ใช้ Docker)
 #
-#  ไฟล์นี้ต้องบันทึกเป็น UTF-8 **พร้อม BOM** เพราะ Windows PowerShell 5.1
-#  จะอ่านไฟล์ที่ไม่มี BOM เป็นรหัส ANSI ทำให้ภาษาไทยเพี้ยนทั้งไฟล์
-# =========================================================================
-# ห้ามใช้ 'Stop' ที่นี่: Windows PowerShell 5.1 จะห่อ stderr ของโปรแกรมภายนอก
-# (docker) เป็น ErrorRecord ทำให้สคริปต์ตายกลางคัน ทั้งที่ docker แค่รายงานสถานะ
-# สคริปต์นี้ตรวจผลของ docker จาก exit code เอง จึงใช้ 'Continue'
-$ErrorActionPreference = 'Continue'
-try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
+#  ไฟล์นี้ต้องบันทึกเป็น UTF-8 พร้อม BOM เสมอ เพราะ Windows PowerShell 5.1 จะอ่าน
+#  ไฟล์ที่ไม่มี BOM เป็นรหัส ANSI แล้วภาษาไทยจะเพี้ยนทั้งไฟล์
+#  ส่วน ndp-kit-setup.bat ต้องเป็น ASCII ล้วน ห้ามมีภาษาไทยเด็ดขาด
+# =============================================================================
 
-# เรียก docker ผ่าน cmd เสมอ เพื่อให้ stderr ถูกรวมเข้า stdout ตั้งแต่ในระดับ cmd
-# PowerShell จึงไม่เห็นมันเป็น error stream (ปัญหาเฉพาะของ PowerShell 5.1)
-#
-# ต้องส่งข้อความออกทาง Write-Host เท่านั้น ห้ามปล่อยลง output stream
-# เพราะ PowerShell คืนค่า "ทุกอย่างที่ฟังก์ชันพ่นออกมา" ไม่ใช่แค่ค่าที่ return
-# ถ้าปล่อย log ลง output stream ผู้เรียกจะได้ array แทน exit code แล้วเช็คผิดทั้งหมด
-function Invoke-Docker {
-  param([string]$Arguments, [switch]$Quiet)
-  if ($Quiet) {
-    cmd /c "docker $Arguments >nul 2>&1" | Out-Null
-  } else {
-    cmd /c "docker $Arguments 2>&1" | ForEach-Object { Write-Host $_ }
-  }
-  return $LASTEXITCODE
-}
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest เร็วขึ้นมากเมื่อไม่วาดแถบ
 
-$IMAGE       = 'ghcr.io/tankitkitty/ndp-kit:latest'
-$CNAME       = 'ndp-kit'
-$DEFAULT_DIR = 'C:\NDPKit'
-$PORTS       = @(3000, 3013, 3113, 3213)
+$APP_NAME     = 'NDP Kit'
+$INSTALL_DIR  = 'C:\NDPKit'
+$APP_URL      = 'https://github.com/tankitkitty/NDP-Kit/releases/latest/download/ndp-kit.zip'
+$APP_ZIP_NAME = 'ndp-kit.zip'
+$NODE_VER     = 'v24.19.0'
+$NODE_ZIP     = "node-$NODE_VER-win-x64.zip"
+$NODE_URL     = "https://nodejs.org/dist/$NODE_VER/$NODE_ZIP"
+$NODE_SHA_URL = "https://nodejs.org/dist/$NODE_VER/SHASUMS256.txt"
+$PORTS        = @(3000, 3013, 3113, 3213)
+$TASK_NAME    = 'NDPKit'
 
-# จำค่าที่ตั้งไว้รอบก่อน เพื่อไม่ต้องถามซ้ำทุกครั้งที่เปิด
+$NodeExe   = Join-Path $INSTALL_DIR 'node\node.exe'
+$AppDir    = Join-Path $INSTALL_DIR 'app'
+$DataDir   = Join-Path $AppDir 'data'
+$LogFile   = Join-Path $INSTALL_DIR 'logs\app.log'
+$StartCmd  = Join-Path $INSTALL_DIR 'start.cmd'
+$StartVbs  = Join-Path $INSTALL_DIR 'start.vbs'
+
+# จำพอร์ตที่ตั้งไว้รอบก่อน เพื่อไม่ให้ URL เปลี่ยนไปมาทุกครั้งที่อัปเดต
 $StateFile = Join-Path $env:LOCALAPPDATA 'ndp-kit-setup.json'
-$State = @{ dir = ''; port = 0 }
+$State = @{ port = 0 }
 if (Test-Path $StateFile) {
   try {
     $j = Get-Content $StateFile -Raw -Encoding UTF8 | ConvertFrom-Json
-    $State.dir = [string]$j.dir
     $State.port = [int]$j.port
   } catch {}
 }
 function Save-State {
   try { [PSCustomObject]$State | ConvertTo-Json | Set-Content $StateFile -Encoding UTF8 } catch {}
-}
-
-# รหัสสำหรับตั้งค่าครั้งแรก - กันคนอื่นใน LAN ชิงเข้าหน้าตั้งค่าก่อนเจ้าหน้าที่
-# แล้วชี้ฐานข้อมูลไปเครื่องของตัวเอง (ดู lib/authGuard.ts ฝั่งโปรแกรม)
-# ชุดตัวอักษร 32 ตัวนี้ตัด I O 0 1 ออกเพราะผู้ใช้ต้องอ่านจากจอแล้วพิมพ์เอง
-# และ 256 หาร 32 ลงตัว การสุ่มด้วย % จึงไม่เอนเอียง
-function New-SetupToken {
-  $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  $bytes = New-Object byte[] 8
-  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-  try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
-  return (-join ($bytes | ForEach-Object { $alphabet[$_ % 32] }))
 }
 
 function Head($text) {
@@ -75,49 +57,141 @@ function Pause-Back {
   [void](Read-Host)
 }
 
-# ------------------------------------------------------------------ Docker
-function Test-DockerReady {
-  if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return 'missing' }
-  if ((Invoke-Docker 'info' -Quiet) -eq 0) { return 'ready' }
-  return 'stopped'
+# รหัสสำหรับตั้งค่าครั้งแรก - กันคนอื่นในวง LAN ชิงเข้าหน้าตั้งค่าก่อนเจ้าหน้าที่
+# แล้วชี้ฐานข้อมูลไปเครื่องของตัวเอง (ดู lib/authGuard.ts ฝั่งโปรแกรม)
+# ชุดตัวอักษร 32 ตัวนี้ตัด I O 0 1 ออกเพราะผู้ใช้ต้องอ่านจากจอแล้วพิมพ์เอง
+# และ 256 หาร 32 ลงตัว การสุ่มด้วย % จึงไม่เอนเอียง
+function New-SetupToken {
+  $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  $bytes = New-Object byte[] 8
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+  return (-join ($bytes | ForEach-Object { $alphabet[$_ % 32] }))
 }
 
-function Ensure-Docker {
-  $s = Test-DockerReady
-  if ($s -eq 'ready') { Ok 'Docker พร้อมใช้งาน'; return $true }
+# ------------------------------------------------------------------ ดาวน์โหลด
+# ไฟล์ที่วางไว้ข้างตัวช่วยติดตั้งมาก่อนเสมอ เพื่อให้เครื่องที่เน็ตช้าหรือไม่มีเน็ต
+# ติดตั้งได้ โดยผู้ดูแลก๊อปไฟล์ใส่ USB ไปพร้อมกัน
+function Find-LocalFile($name) {
+  # ว่างได้เมื่อรันแบบบรรทัดเดียว (irm ... | iex) เพราะไม่มีไฟล์อยู่บนดิสก์
+  # กรณีนั้นไม่มีไฟล์ข้างๆ ให้หาอยู่แล้ว ข้ามไปดาวน์โหลดตามปกติ
+  if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) { return $null }
+  $p = Join-Path $PSScriptRoot $name
+  if (Test-Path $p) { return $p }
+  return $null
+}
 
-  if ($s -eq 'missing') {
-    Err 'ไม่พบ Docker ในเครื่องนี้'
-    Write-Host ''
-    Step 'ต้องติดตั้ง Docker Desktop ก่อน แล้วจึงรันไฟล์นี้อีกครั้ง'
-    Step 'ดาวน์โหลดที่ https://www.docker.com/products/docker-desktop/'
-    Write-Host ''
-    if ((Read-Host '  พิมพ์ y แล้ว Enter เพื่อเปิดหน้าดาวน์โหลด') -eq 'y') {
-      Start-Process 'https://www.docker.com/products/docker-desktop/'
-    }
+function Get-RemoteFile($url, $dest, $label) {
+  Step "กำลังดาวน์โหลด$label ..."
+  try {
+    Invoke-WebRequest $url -OutFile $dest -UseBasicParsing -TimeoutSec 600
+    return $true
+  } catch {
+    Err "ดาวน์โหลด$label ไม่สำเร็จ"
+    Step "  สาเหตุ: $($_.Exception.Message)"
     return $false
   }
+}
 
-  Warn 'Docker ติดตั้งไว้แล้วแต่ยังไม่ได้เปิด - กำลังเปิด Docker Desktop ให้'
-  $exe = Join-Path $env:ProgramFiles 'Docker\Docker\Docker Desktop.exe'
-  if (Test-Path $exe) { Start-Process $exe } else { Warn 'หา Docker Desktop.exe ไม่เจอ กรุณาเปิดเอง' }
-  Step 'รอ Docker พร้อมใช้งาน (ครั้งแรกอาจนาน 1-2 นาที)'
-  for ($i = 1; $i -le 60; $i++) {
-    Start-Sleep -Seconds 3
-    if ((Test-DockerReady) -eq 'ready') { Ok 'Docker พร้อมใช้งานแล้ว'; return $true }
-    if ($i % 5 -eq 0) { Step "   ... รอมาแล้ว $($i * 3) วินาที" }
+# ตรวจว่าไฟล์ Node ที่ได้มาตรงกับค่าที่ nodejs.org ประกาศไว้จริง
+# กันไฟล์ถูกแก้ระหว่างทาง หรือดาวน์โหลดมาไม่ครบ
+function Test-NodeHash($zipPath) {
+  try {
+    $sums = (Invoke-WebRequest $NODE_SHA_URL -UseBasicParsing -TimeoutSec 60).Content
+  } catch {
+    Warn 'ตรวจสอบลายเซ็นไฟล์ Node ไม่ได้ (ต่ออินเทอร์เน็ตไม่ได้) - ข้ามการตรวจ'
+    return $true
   }
-  Err 'Docker ยังไม่พร้อม กรุณาเปิด Docker Desktop เองแล้วลองใหม่'
+  $line = ($sums -split "`n" | Where-Object { $_ -match ([regex]::Escape($NODE_ZIP)) } | Select-Object -First 1)
+  if (-not $line) { Warn 'ไม่พบค่าลายเซ็นของไฟล์นี้ - ข้ามการตรวจ'; return $true }
+  $expected = (($line -split '\s+')[0]).Trim().ToLower()
+  $actual = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLower()
+  if ($expected -eq $actual) { Ok 'ตรวจลายเซ็นไฟล์ Node ผ่าน'; return $true }
+  Err 'ลายเซ็นไฟล์ Node ไม่ตรง - ไฟล์อาจเสียหายหรือถูกแก้ไข'
+  Step "  ที่ควรเป็น : $expected"
+  Step "  ที่ได้มา   : $actual"
   return $false
 }
 
-# ------------------------------------------------------------------- พอร์ต
+function Ensure-Node {
+  if (Test-Path $NodeExe) {
+    $v = & $NodeExe -v 2>$null
+    Ok "มี Node อยู่แล้วในโฟลเดอร์โปรแกรม ($v)"
+    return $true
+  }
+
+  $tmp = Join-Path $env:TEMP $NODE_ZIP
+  $local = Find-LocalFile $NODE_ZIP
+  if ($local) {
+    Ok "พบไฟล์ Node ที่วางไว้ข้างตัวช่วยติดตั้ง - ไม่ต้องดาวน์โหลด"
+    Copy-Item $local $tmp -Force
+  } else {
+    Step "ยังไม่มี Node ในเครื่อง จะดาวน์โหลดรุ่น $NODE_VER (ประมาณ 30 MB)"
+    if (-not (Get-RemoteFile $NODE_URL $tmp 'Node.js')) { return $false }
+  }
+
+  if (-not (Test-NodeHash $tmp)) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue; return $false }
+
+  Step 'กำลังแตกไฟล์ Node ...'
+  $stage = Join-Path $env:TEMP 'ndpkit-node-stage'
+  Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+  try {
+    Expand-Archive -Path $tmp -DestinationPath $stage -Force
+    # ใน zip มีโฟลเดอร์ชั้นเดียวชื่อ node-vXX-win-x64 ครอบอยู่ ต้องดึงข้างในออกมา
+    $inner = Get-ChildItem $stage -Directory | Select-Object -First 1
+    $target = Join-Path $INSTALL_DIR 'node'
+    Remove-Item $target -Recurse -Force -ErrorAction SilentlyContinue
+    Move-Item $inner.FullName $target -Force
+  } catch {
+    Err "แตกไฟล์ Node ไม่สำเร็จ: $($_.Exception.Message)"
+    return $false
+  } finally {
+    Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+  }
+
+  if (-not (Test-Path $NodeExe)) { Err 'ติดตั้ง Node ไม่สำเร็จ'; return $false }
+  Ok "ติดตั้ง Node $NODE_VER เรียบร้อย (อยู่ในโฟลเดอร์โปรแกรม ไม่ยุ่งกับระบบเดิมของเครื่อง)"
+  return $true
+}
+
+# ------------------------------------------------------------- จัดการโปรแกรม
+function Get-AppProcesses {
+  try {
+    return @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+      Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($INSTALL_DIR, [StringComparison]::OrdinalIgnoreCase) })
+  } catch { return @() }
+}
+
+function Stop-App {
+  $procs = Get-AppProcesses
+  if ($procs.Count -eq 0) { return $false }
+  foreach ($p in $procs) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+  Start-Sleep -Seconds 2
+  return $true
+}
+
+function Start-App {
+  if (-not (Test-Path $StartVbs)) { return $false }
+  Start-Process 'wscript.exe' -ArgumentList "`"$StartVbs`"" -WindowStyle Hidden
+  return $true
+}
+
+function Test-AppReady([int]$port, [int]$tries = 30) {
+  for ($i = 1; $i -le $tries; $i++) {
+    Start-Sleep -Seconds 2
+    try {
+      $r = Invoke-WebRequest "http://localhost:$port/login" -UseBasicParsing -TimeoutSec 5
+      if ($r.StatusCode -eq 200) { return $true }
+    } catch {}
+  }
+  return $false
+}
+
 function Test-PortFree([int]$p) {
   try {
-    $used = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue
-    return ($null -eq $used)
+    return ($null -eq (Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue))
   } catch {
-    # เครื่องที่ไม่มี cmdlet นี้ ให้ถอยไปใช้ netstat
     $hit = netstat -ano -p TCP | Select-String -SimpleMatch ":$p " | Select-String -SimpleMatch 'LISTENING'
     return ($null -eq $hit)
   }
@@ -133,122 +207,117 @@ function Get-LanUrls([int]$port) {
   return $urls
 }
 
+function Get-InstalledVersion {
+  $f = Join-Path $AppDir 'version.txt'
+  if (Test-Path $f) { return (Get-Content $f -Raw).Trim() }
+  return ''
+}
+
 # ----------------------------------------------------------------- ติดตั้ง
 function Invoke-Install {
-  Head 'ขั้นตอนที่ 1/5 : ตรวจสอบ Docker'
-  if (-not (Ensure-Docker)) { Pause-Back; return }
+  Head "ขั้นตอนที่ 1/5 : เตรียม Node.js"
+  if (-not (Test-Path $INSTALL_DIR)) { New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null }
+  if (-not (Ensure-Node)) { Pause-Back; return }
 
-  Head 'ขั้นตอนที่ 2/5 : เตรียมที่เก็บโปรแกรม'
-  # ไม่ถามผู้ใช้แล้ว - ลงที่ C:\NDPKit เสมอ เพื่อให้ทุกหน่วยบริการอยู่ตำแหน่งเดียวกัน
-  # เวลาช่วยแก้ปัญหาทางโทรศัพท์จะได้ไม่ต้องไล่ถามว่าเครื่องนี้ลงไว้ตรงไหน
-  #
-  # ค่าที่จำไว้รอบก่อนจะใช้ต่อเฉพาะเมื่อเป็นพาธเต็มเท่านั้น เพราะของเดิมเคยเก็บ
-  # ค่าอย่าง "." ได้ ทำให้ไฟล์ของโปรแกรมไปกองอยู่ในโฟลเดอร์ที่บังเอิญเปิดอยู่
-  # ตอนนั้น แล้วครั้งต่อไปก็ถูกเสนอค่านั้นซ้ำอีก
-  $dir = if ($State.dir -and [System.IO.Path]::IsPathRooted($State.dir)) { $State.dir } else { $DEFAULT_DIR }
-  Step "ที่เก็บโปรแกรม : $dir"
-  try {
-    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-  } catch {
-    Warn "สร้างโฟลเดอร์ที่ $dir ไม่ได้ - เปลี่ยนไปใช้โฟลเดอร์ผู้ใช้แทน"
-    $dir = Join-Path $env:USERPROFILE 'NDPKit'
-    New-Item -ItemType Directory -Path $dir -Force | Out-Null
-  }
-  $State.dir = $dir
-  Ok "จะติดตั้งที่ $dir"
-
-  # เคลียร์ตัวเก่าก่อนเลือกพอร์ต ไม่งั้นตัวเก่าที่กำลังจะถูกแทนที่ยังจองพอร์ตอยู่
-  # ระบบจะเด้งไปพอร์ตอื่นทั้งที่ไม่จำเป็น ทำให้ผู้ใช้สับสน
-  # ปลอดภัย เพราะค่าตั้งค่าทั้งหมดอยู่ในโฟลเดอร์ data ที่อยู่นอก container
-  $existing = (cmd /c "docker ps -aq --filter name=^/$CNAME$ 2>nul") -join ''
-  if (-not [string]::IsNullOrWhiteSpace($existing)) {
-    $oldDir = ''
-    try {
-      $info = cmd /c "docker inspect $CNAME 2>nul" | ConvertFrom-Json
-      $oldDir = [string]$info[0].Config.Labels.'com.docker.compose.project.working_dir'
-    } catch {}
-    Write-Host ''
-    Warn 'พบโปรแกรมที่ติดตั้งไว้ก่อนหน้านี้อยู่แล้วในเครื่อง'
-    if ($oldDir) { Step "ตัวเดิมติดตั้งจากโฟลเดอร์ : $oldDir" }
-    Step "ตัวใหม่จะติดตั้งที่          : $dir"
-    Write-Host ''
-    Step 'ถ้าทำต่อ ระบบจะปิดตัวเดิมแล้วใช้ตัวใหม่แทน'
-    Write-Host '  (ค่าตั้งค่าในโฟลเดอร์ data ของทั้งสองที่จะไม่ถูกลบ)' -ForegroundColor DarkGray
-    Write-Host ''
-    if ((Read-Host '  พิมพ์ y แล้ว Enter เพื่อทำต่อ (หรือ Enter เปล่าเพื่อยกเลิก)') -ne 'y') {
-      Warn 'ยกเลิกแล้ว ไม่มีอะไรเปลี่ยนแปลง'
-      Pause-Back
-      return
+  Head 'ขั้นตอนที่ 2/5 : ดาวน์โหลดตัวโปรแกรม'
+  $zip = Join-Path $env:TEMP $APP_ZIP_NAME
+  $local = Find-LocalFile $APP_ZIP_NAME
+  if ($local) {
+    Ok 'พบไฟล์โปรแกรมที่วางไว้ข้างตัวช่วยติดตั้ง - ไม่ต้องดาวน์โหลด'
+    Copy-Item $local $zip -Force
+  } else {
+    if (-not (Get-RemoteFile $APP_URL $zip 'ตัวโปรแกรมเวอร์ชันล่าสุด')) {
+      Step ''
+      Step 'ถ้าเครื่องนี้ต่ออินเทอร์เน็ตไม่ได้ ให้ผู้ดูแลดาวน์โหลดไฟล์ ndp-kit.zip'
+      Step 'จากหน้า Releases ของโปรเจกต์ แล้ววางไว้ในโฟลเดอร์เดียวกับไฟล์นี้'
+      Pause-Back; return
     }
-    $null = Invoke-Docker "rm -f $CNAME" -Quiet
-    # Docker คืนพอร์ตช้ากว่าคำสั่ง rm เล็กน้อย ถ้าไปเช็คพอร์ตทันทีจะเห็นว่ายังไม่ว่าง
-    # แล้วเด้งไปพอร์ตอื่นทั้งที่ไม่จำเป็น รอสักครู่ให้พอร์ตถูกปล่อยจริงก่อน
-    Start-Sleep -Seconds 3
-    Ok 'ปิดตัวเดิมเรียบร้อย'
+  }
+  Ok 'ได้ไฟล์โปรแกรมแล้ว'
+
+  Head 'ขั้นตอนที่ 3/5 : ติดตั้งลงเครื่อง'
+  $wasRunning = Stop-App
+  if ($wasRunning) { Ok 'ปิดโปรแกรมตัวเดิมที่กำลังทำงานอยู่แล้ว' }
+
+  # ค่าตั้งค่าของหน่วยบริการอยู่ใน app\data ต้องยกออกมาพักไว้ก่อนลบของเก่า
+  # ไม่งั้นอัปเดตทีเดียวค่า MySQL หายหมด ต้องตั้งใหม่ทุกครั้ง
+  $isFresh = -not (Test-Path (Join-Path $DataDir 'dbconfig.json'))
+  $dataBackup = Join-Path $env:TEMP 'ndpkit-data-keep'
+  Remove-Item $dataBackup -Recurse -Force -ErrorAction SilentlyContinue
+  if (Test-Path $DataDir) {
+    Copy-Item $DataDir $dataBackup -Recurse -Force
+    Step 'เก็บค่าตั้งค่าเดิมไว้ชั่วคราวแล้ว'
   }
 
-  Head 'ขั้นตอนที่ 3/5 : เลือกพอร์ต'
+  try {
+    Remove-Item $AppDir -Recurse -Force -ErrorAction SilentlyContinue
+    Expand-Archive -Path $zip -DestinationPath $AppDir -Force
+  } catch {
+    Err "แตกไฟล์โปรแกรมไม่สำเร็จ: $($_.Exception.Message)"
+    Pause-Back; return
+  } finally {
+    Remove-Item $zip -Force -ErrorAction SilentlyContinue
+  }
+
+  if (Test-Path $dataBackup) {
+    Copy-Item $dataBackup $DataDir -Recurse -Force
+    Remove-Item $dataBackup -Recurse -Force -ErrorAction SilentlyContinue
+    Ok 'คืนค่าตั้งค่าเดิมกลับแล้ว - ไม่ต้องตั้งค่า MySQL ใหม่'
+  }
+  if (-not (Test-Path $DataDir)) { New-Item -ItemType Directory -Path $DataDir -Force | Out-Null }
+
+  $ver = Get-InstalledVersion
+  if ($ver) { Ok "ติดตั้งเวอร์ชัน $ver แล้ว" } else { Ok 'ติดตั้งไฟล์โปรแกรมแล้ว' }
+
+  Head 'ขั้นตอนที่ 4/5 : ตั้งค่าการเริ่มโปรแกรม'
   $port = 0
   foreach ($p in $PORTS) {
-    # พอร์ตที่โปรแกรมเราใช้อยู่เองถือว่าใช้ได้ (กรณีกดอัปเดตซ้ำ)
     if ((Test-PortFree $p) -or ($State.port -eq $p)) { $port = $p; break }
     Warn "พอร์ต $p ถูกโปรแกรมอื่นใช้อยู่ - ลองพอร์ตถัดไป"
   }
   if ($port -eq 0) { $port = $PORTS[0]; Warn "ไม่พบพอร์ตว่าง จะลองใช้ $port" }
   $State.port = $port
+  Save-State
   Ok "จะใช้พอร์ต $port"
 
-  Head 'ขั้นตอนที่ 4/5 : เตรียมไฟล์ตั้งค่า'
-  $dataDir = Join-Path $dir 'data'
-  if (-not (Test-Path $dataDir)) { New-Item -ItemType Directory -Path $dataDir -Force | Out-Null }
-  # ถ้ามี dbconfig.json อยู่แล้วแปลว่าเครื่องนี้ตั้งค่าเสร็จไปแล้ว (กดเมนู 1 เพื่ออัปเดต)
-  # ช่วงติดตั้งจบไปแล้ว รหัสติดตั้งจึงไม่มีความหมาย ไม่ต้องแสดงให้สับสน
-  $isFresh = -not (Test-Path (Join-Path $dataDir 'dbconfig.json'))
   $setupToken = New-SetupToken
-  $compose = @"
-# NDP Kit - ไฟล์นี้สร้างอัตโนมัติโดยตัวช่วยติดตั้ง
-services:
-  ndp-kit:
-    image: $IMAGE
-    container_name: $CNAME
-    restart: unless-stopped
-    ports:
-      - "`${APP_PORT:-3000}:3000"
-    environment:
-      - TZ=Asia/Bangkok
-      - SETUP_TOKEN=`${SETUP_TOKEN:-}
-    volumes:
-      - ./data:/app/data
+  New-Item -ItemType Directory -Path (Join-Path $INSTALL_DIR 'logs') -Force | Out-Null
+
+  # start.cmd เขียนเป็น ASCII ล้วนด้วยเหตุผลเดียวกับ ndp-kit-setup.bat
+  # (cmd.exe อ่านทีละไบต์ตาม code page ภาษาไทยจะทำให้ตัวแยกคำสั่งเลื่อนตำแหน่ง)
+  $cmd = @"
+@echo off
+cd /d "%~dp0app"
+set "PORT=$port"
+set "SETUP_TOKEN=$setupToken"
+if not exist "%~dp0logs" mkdir "%~dp0logs"
+"%~dp0node\node.exe" server.js >> "%~dp0logs\app.log" 2>&1
 "@
-  Set-Content (Join-Path $dir 'docker-compose.yml') $compose -Encoding UTF8
-  Set-Content (Join-Path $dir '.env') @("APP_PORT=$port", "SETUP_TOKEN=$setupToken") -Encoding UTF8
-  Save-State
-  Ok 'สร้าง docker-compose.yml และ .env แล้ว'
-  Step 'ค่าตั้งค่าของหน่วยบริการเก็บในโฟลเดอร์ data (อัปเดตกี่ครั้งก็ไม่หาย)'
+  Set-Content $StartCmd $cmd -Encoding Ascii
 
-  Head 'ขั้นตอนที่ 5/5 : ดาวน์โหลดและเริ่มโปรแกรม'
-  Step 'กำลังดาวน์โหลดเวอร์ชันล่าสุด (ครั้งแรกอาจใช้เวลาสักครู่)'
-  Push-Location $dir
+  # เรียกผ่าน wscript เพื่อให้หน้าต่างดำไม่เด้งค้างบนจอผู้ใช้ (พารามิเตอร์ 0 = ซ่อน)
+  $vbs = @"
+Set sh = CreateObject("WScript.Shell")
+base = Left(WScript.ScriptFullName, InStrRev(WScript.ScriptFullName, "\"))
+sh.Run """" & base & "start.cmd""", 0, False
+"@
+  Set-Content $StartVbs $vbs -Encoding Ascii
+  Ok 'สร้างไฟล์เริ่มโปรแกรมแล้ว'
+
+  # แทนที่ restart: unless-stopped ของ Docker เดิม - ให้เปิดเองทุกครั้งที่ล็อกอิน
   try {
-    if ((Invoke-Docker 'compose pull') -ne 0) {
-      Err 'ดาวน์โหลดไม่สำเร็จ - ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต'; Pause-Back; return
-    }
-    if ((Invoke-Docker 'compose up -d') -ne 0) {
-      Err 'เริ่มโปรแกรมไม่สำเร็จ - ดูรายละเอียดที่เมนู 3'; Pause-Back; return
-    }
-  } finally { Pop-Location }
+    $null = schtasks /create /tn $TASK_NAME /tr "wscript.exe `"$StartVbs`"" /sc onlogon /f 2>&1
+    if ($LASTEXITCODE -eq 0) { Ok 'ตั้งให้เปิดโปรแกรมเองอัตโนมัติทุกครั้งที่เข้าใช้เครื่อง' }
+    else { Warn 'ตั้งให้เปิดอัตโนมัติไม่สำเร็จ - เปิดเองได้ที่เมนู 4' }
+  } catch { Warn 'ตั้งให้เปิดอัตโนมัติไม่สำเร็จ - เปิดเองได้ที่เมนู 4' }
 
-  Write-Host ''
-  Step 'กำลังตรวจว่าโปรแกรมพร้อมใช้งาน...'
-  $ready = $false
-  for ($i = 1; $i -le 20; $i++) {
-    Start-Sleep -Seconds 3
-    try {
-      $r = Invoke-WebRequest "http://localhost:$port/login" -UseBasicParsing -TimeoutSec 5
-      if ($r.StatusCode -eq 200) { $ready = $true; break }
-    } catch {}
+  Head 'ขั้นตอนที่ 5/5 : เริ่มโปรแกรม'
+  Step 'กำลังเริ่มโปรแกรม ...'
+  [void](Start-App)
+  if (-not (Test-AppReady $port)) {
+    Err 'โปรแกรมยังไม่ตอบสนอง - ดูรายละเอียดที่เมนู 3'
+    Pause-Back; return
   }
-  if (-not $ready) { Err 'โปรแกรมยังไม่ตอบสนอง - ลองดู log ที่เมนู 3'; Pause-Back; return }
 
   Head 'ติดตั้งสำเร็จแล้ว'
   Write-Host "  เปิดใช้งานที่เครื่องนี้ : http://localhost:$port" -ForegroundColor Green
@@ -266,76 +335,91 @@ services:
     Write-Host ''
   }
   Step '2. กรอกข้อมูล MySQL ของ HOSxP แล้วกด Save Config และ Test Connection'
-  Write-Host '     *** ถ้า MySQL อยู่เครื่องเดียวกับ Docker ให้ใส่ host เป็น' -ForegroundColor Yellow
-  Write-Host '         host.docker.internal แทน localhost ***' -ForegroundColor Yellow
+  Write-Host '     *** host ใส่ localhost ได้ตามปกติ ถ้า MySQL อยู่เครื่องเดียวกัน ***' -ForegroundColor Yellow
   Step '3. เข้าสู่ระบบด้วยบัญชีเจ้าหน้าที่ในระบบ HOSxP'
   Write-Host ''
   Step 'มีเวอร์ชันใหม่เมื่อไร ให้รันไฟล์นี้แล้วเลือกเมนู 1 อีกครั้ง'
   Write-Host ''
   if ((Read-Host '  พิมพ์ y แล้ว Enter เพื่อเปิดหน้าเว็บเลย') -eq 'y') {
-    Start-Process "http://localhost:$port"
+    Start-Process "http://localhost:$($State.port)"
   }
   Pause-Back
 }
 
 # --------------------------------------------------------------- เมนูอื่น
 function Invoke-OpenWeb {
-  $port = if ($State.port) { $State.port } else { 3000 }
-  Start-Process "http://localhost:$port"
+  if ($State.port -eq 0) { Head 'เปิดหน้าเว็บ'; Err 'ยังไม่ได้ติดตั้ง - เลือกเมนู 1 ก่อน'; Pause-Back; return }
+  Start-Process "http://localhost:$($State.port)"
 }
 
 function Invoke-Status {
-  Head 'สถานะโปรแกรม'
-  # ใช้รูปแบบตารางมาตรฐานของ docker ไม่ใส่ --format ที่มีเว้นวรรค/ภาษาไทย
-  # เพราะต้องส่งผ่าน cmd อีกชั้น เครื่องหมายคำพูดซ้อนจะทำให้ cmd แปลคำสั่งผิด
-  $null = Invoke-Docker "ps -a --filter name=$CNAME"
+  Head 'สถานะและ log'
+  $procs = Get-AppProcesses
+  if ($procs.Count -gt 0) { Ok "โปรแกรมกำลังทำงาน (process id: $(($procs | ForEach-Object { $_.ProcessId }) -join ', '))" }
+  else { Warn 'โปรแกรมไม่ได้ทำงานอยู่' }
+  $ver = Get-InstalledVersion
+  if ($ver) { Step "เวอร์ชันที่ติดตั้ง : $ver" }
+  if ($State.port -gt 0) { Step "พอร์ต             : $($State.port)" }
+  Step "โฟลเดอร์          : $INSTALL_DIR"
   Write-Host ''
-  Write-Host '  --- log 30 บรรทัดล่าสุด ---' -ForegroundColor DarkGray
-  # docker logs ส่งบางส่วนออก stderr เป็นปกติ จึงต้องรวมสตรีมตั้งแต่ระดับ cmd
-  $null = Invoke-Docker "logs --tail 30 $CNAME"
+  if (Test-Path $LogFile) {
+    Write-Host '  --- log 30 บรรทัดล่าสุด ---' -ForegroundColor DarkGray
+    Get-Content $LogFile -Tail 30 | ForEach-Object { Write-Host "  $_" }
+  } else {
+    Step 'ยังไม่มีไฟล์ log'
+  }
   Pause-Back
 }
 
 function Invoke-Toggle {
   Head 'เริ่ม / หยุด โปรแกรม'
-  # -q คืนเฉพาะ container id จึงไม่ต้องใช้ --format ที่มีวงเล็บปีกกา
-  $running = (cmd /c "docker ps -q --filter name=$CNAME 2>nul") -join ''
-  if (-not [string]::IsNullOrWhiteSpace($running)) {
-    Step 'กำลังหยุดโปรแกรม...'
-    if ((Invoke-Docker "stop $CNAME" -Quiet) -eq 0) { Ok 'หยุดแล้ว' } else { Err 'หยุดไม่สำเร็จ' }
+  if ((Get-AppProcesses).Count -gt 0) {
+    Step 'โปรแกรมกำลังทำงานอยู่ - กำลังหยุด ...'
+    [void](Stop-App)
+    Ok 'หยุดโปรแกรมแล้ว'
   } else {
-    Step 'กำลังเริ่มโปรแกรม...'
-    if ((Invoke-Docker "start $CNAME" -Quiet) -eq 0) { Ok 'เริ่มแล้ว' } else { Err 'เริ่มไม่สำเร็จ - อาจยังไม่ได้ติดตั้ง (เมนู 1)' }
+    if (-not (Test-Path $StartVbs)) { Err 'ยังไม่ได้ติดตั้ง - เลือกเมนู 1 ก่อน'; Pause-Back; return }
+    Step 'กำลังเริ่มโปรแกรม ...'
+    [void](Start-App)
+    if (Test-AppReady $State.port 15) { Ok "เริ่มแล้ว - http://localhost:$($State.port)" }
+    else { Warn 'เริ่มแล้วแต่ยังไม่ตอบสนอง ลองดู log ที่เมนู 3' }
   }
   Pause-Back
 }
 
 function Invoke-Uninstall {
   Head 'ถอนการติดตั้ง'
-  Step 'จะหยุดและลบโปรแกรมออกจาก Docker'
-  Write-Host '  *** โฟลเดอร์ data ที่เก็บค่าตั้งค่าจะไม่ถูกลบ ***' -ForegroundColor Yellow
+  Step "จะหยุดโปรแกรมและลบโฟลเดอร์ $INSTALL_DIR"
+  Write-Host '  *** โฟลเดอร์ data ที่เก็บค่าตั้งค่าจะถูกคัดลอกไปเก็บไว้ที่หน้า Desktop ก่อนลบ ***' -ForegroundColor Yellow
   Write-Host ''
   if ((Read-Host '  พิมพ์ yes แล้ว Enter เพื่อยืนยัน') -ne 'yes') {
     Warn 'ยกเลิกแล้ว ไม่มีอะไรถูกลบ'
-    Pause-Back
-    return
+    Pause-Back; return
   }
-  $null = Invoke-Docker "stop $CNAME" -Quiet
-  $null = Invoke-Docker "rm $CNAME" -Quiet
-  $null = Invoke-Docker "image rm $IMAGE" -Quiet
-  Ok 'ลบโปรแกรมออกจาก Docker แล้ว'
-  if ($State.dir) {
-    Step "ถ้าต้องการลบค่าตั้งค่าด้วย ให้ลบโฟลเดอร์ $(Join-Path $State.dir 'data') เอง"
+  [void](Stop-App)
+  try { $null = schtasks /delete /tn $TASK_NAME /f 2>&1 } catch {}
+  if (Test-Path $DataDir) {
+    $keep = Join-Path ([Environment]::GetFolderPath('Desktop')) "NDPKit-data-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    try { Copy-Item $DataDir $keep -Recurse -Force; Ok "สำรองค่าตั้งค่าไว้ที่ $keep" } catch { Warn 'สำรองค่าตั้งค่าไม่สำเร็จ' }
+  }
+  try {
+    Remove-Item $INSTALL_DIR -Recurse -Force
+    Ok 'ถอนการติดตั้งเรียบร้อย'
+  } catch {
+    Err "ลบโฟลเดอร์ไม่สำเร็จ: $($_.Exception.Message)"
   }
   Pause-Back
 }
 
-# --------------------------------------------------------------- เมนูหลัก
+# ------------------------------------------------------------------- เมนู
 while ($true) {
-  Head 'NDP Kit - ตัวช่วยติดตั้ง'
-  if ($State.dir)  { Write-Host "  ตำแหน่งติดตั้ง : $($State.dir)"  -ForegroundColor DarkGray }
-  if ($State.port) { Write-Host "  พอร์ตที่ใช้     : $($State.port)" -ForegroundColor DarkGray }
-  if ($State.dir)  { Write-Host '' }
+  Head "$APP_NAME - ตัวช่วยติดตั้ง"
+  $ver = Get-InstalledVersion
+  if ($ver) { Write-Host "  ติดตั้งไว้แล้ว : $ver" -ForegroundColor DarkGray }
+  if ((Get-AppProcesses).Count -gt 0 -and $State.port -gt 0) {
+    Write-Host "  กำลังทำงานที่  : http://localhost:$($State.port)" -ForegroundColor DarkGray
+  }
+  Write-Host ''
   Write-Host '  [1] ติดตั้ง หรือ อัปเดตเป็นเวอร์ชันล่าสุด'
   Write-Host '  [2] เปิดหน้าเว็บโปรแกรม'
   Write-Host '  [3] ดูสถานะและ log'
@@ -350,5 +434,6 @@ while ($true) {
     '4' { Invoke-Toggle }
     '5' { Invoke-Uninstall }
     '0' { exit 0 }
+    default { }
   }
 }

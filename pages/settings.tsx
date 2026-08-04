@@ -39,6 +39,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
 type NhsoStatus = { env: string; items: NhsoConfigItem[]; ready: boolean };
 
+type RegisterPreview = { hospitalCode: string; hospitalName: string; version: string };
+
 function validateConfig(config: Config): string | null {
   if (!config.host.trim()) return "กรุณาระบุ Host";
   if (!Number.isInteger(config.port) || config.port <= 0 || config.port > 65535) return "Port ไม่ถูกต้อง";
@@ -79,6 +81,8 @@ export default function Settings({
   const [savingConfig43, setSavingConfig43] = useState(false);
   const [testingConnection43, setTestingConnection43] = useState(false);
   const [activeTab, setActiveTab] = useState<"main" | "file43" | "nhso">("main");
+  const [registerPrompt, setRegisterPrompt] = useState<RegisterPreview | null>(null);
+  const [sendingRegister, setSendingRegister] = useState(false);
 
   useEffect(() => {
     // ช่วงติดตั้งครั้งแรกยังไม่มีค่าอะไรให้โหลด และคำขอจะถูกปฏิเสธเพราะยังไม่ได้
@@ -86,7 +90,43 @@ export default function Settings({
     if (needsSetupToken) return;
     fetchConfig();
     fetchConfig43();
+    fetchRegisterPrompt();
   }, [needsSetupToken]);
+
+  // ถามเรื่องลงทะเบียนหน่วยบริการครั้งเดียวหลังตั้งค่าเสร็จ
+  // ฝั่งเซิร์ฟเวอร์เป็นคนตัดสินว่าควรถามไหม (ปิดฟีเจอร์ไว้ / ตอบไปแล้ว = ไม่ถาม)
+  async function fetchRegisterPrompt() {
+    try {
+      const res = await fetch("/api/register-hospital");
+      const data = await res.json();
+      if (res.ok && data.shouldAsk) setRegisterPrompt(data.preview);
+    } catch {
+      // ถามไม่ได้ก็ข้ามไป ไม่ใช่ส่วนที่จำเป็นต่อการใช้งาน
+    }
+  }
+
+  async function answerRegister(consent: boolean) {
+    setSendingRegister(true);
+    try {
+      const res = await fetch("/api/register-hospital", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consent }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRegisterPrompt(null);
+        if (consent) showToast(data.message || "ส่งข้อมูลเรียบร้อย", "success");
+      } else {
+        // ส่งไม่สำเร็จให้การ์ดค้างไว้ จะได้กดส่งซ้ำเมื่อเน็ตกลับมา
+        showToast(data.error || "ส่งข้อมูลไม่สำเร็จ", "error");
+      }
+    } catch {
+      showToast("ส่งข้อมูลไม่สำเร็จ", "error");
+    } finally {
+      setSendingRegister(false);
+    }
+  }
 
   // แนบรหัสติดตั้งไปกับทุกคำขอเฉพาะช่วงติดตั้งครั้งแรก หลังจากนั้นใช้ session ตามปกติ
   function requestHeaders(): Record<string, string> {
@@ -279,6 +319,39 @@ export default function Settings({
                 spellCheck={false}
                 onChange={(e) => setSetupToken(e.target.value)}
               />
+            </div>
+          </div>
+        ) : null}
+
+        {registerPrompt ? (
+          <div className="add-item-card" style={{ maxWidth: 560, marginBottom: 20 }}>
+            <h2 className="section-title" style={{ marginTop: 0 }}>ลงทะเบียนหน่วยบริการ</h2>
+            <p style={{ marginTop: 0, color: "var(--muted)" }}>
+              ส่งข้อมูลด้านล่างให้ผู้พัฒนา เพื่อให้ทราบว่ามีหน่วยบริการใดใช้งานอยู่บ้าง
+              และแจ้งเตือนได้เมื่อมีเวอร์ชันใหม่ — <strong>ไม่มีข้อมูลผู้ป่วยหรือข้อมูลส่วนบุคคล</strong>
+              ถามครั้งเดียว ไม่ส่งก็ใช้งานได้ตามปกติทุกอย่าง
+            </p>
+            <div className="grid-form" style={{ marginBottom: 12 }}>
+              <div className="toolbar" style={{ justifyContent: "space-between" }}>
+                <span>รหัสสถานพยาบาล</span>
+                <strong>{registerPrompt.hospitalCode || "(ไม่พบในฐานข้อมูล)"}</strong>
+              </div>
+              <div className="toolbar" style={{ justifyContent: "space-between" }}>
+                <span>ชื่อสถานพยาบาล</span>
+                <strong>{registerPrompt.hospitalName || "(ไม่พบในฐานข้อมูล)"}</strong>
+              </div>
+              <div className="toolbar" style={{ justifyContent: "space-between" }}>
+                <span>เวอร์ชันที่ใช้</span>
+                <strong>{registerPrompt.version || "(ไม่ทราบ)"}</strong>
+              </div>
+            </div>
+            <div className="toolbar">
+              <button className="button-primary" onClick={() => answerRegister(true)} disabled={sendingRegister}>
+                {sendingRegister ? "กำลังส่ง..." : "ส่งข้อมูล"}
+              </button>
+              <button className="button-ghost" onClick={() => answerRegister(false)} disabled={sendingRegister}>
+                ไม่ส่ง
+              </button>
             </div>
           </div>
         ) : null}
