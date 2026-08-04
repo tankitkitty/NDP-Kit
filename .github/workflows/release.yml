@@ -33,6 +33,9 @@ jobs:
         run: npm run build
         env:
           NEXT_OUTPUT: standalone
+          # ฝังเลขเวอร์ชันลงในหน้าเว็บ เพื่อให้แถบข้างซ้ายแสดงได้ทุกหน้า
+          # ต้องเป็น NEXT_PUBLIC_ เท่านั้น Next.js ถึงจะส่งค่าไปถึงฝั่งเบราว์เซอร์
+          NEXT_PUBLIC_APP_VERSION: ${{ github.ref_name }}
 
       # Next.js standalone ไม่ได้ก๊อป .next/static กับ public มาให้ในตัว
       # ต้องประกอบเองตามที่เอกสาร Next.js กำหนด ไม่งั้นหน้าเว็บจะไม่มี CSS/รูป

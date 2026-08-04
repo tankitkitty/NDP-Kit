@@ -4,6 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import Logo from "./Logo";
 
+/**
+ * เลขเวอร์ชันถูกฝังตอน build โดย .github/workflows/release.yml (ค่าจาก git tag)
+ *
+ * ใช้วิธีนี้แทนการอ่านไฟล์ version.txt ตอนรัน เพราะ Layout อยู่ฝั่งเบราว์เซอร์
+ * ถ้าจะอ่านไฟล์ต้องส่ง prop ผ่านทุกหน้า หรือยิง API เพิ่มทุกครั้งที่เปลี่ยนหน้า
+ * ส่วนตอนรันจากซอร์สโค้ดของนักพัฒนาจะไม่มีค่า จึงไม่แสดงอะไร
+ */
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "";
+
 interface NavItem {
   href: string;
   label: string;
@@ -56,6 +65,7 @@ export default function Layout({ title, loginname, hospitalName, fullWidth, chil
         <div className="sidebar-brand">
           <Logo size={40} />
           <span className="sidebar-brand-name">NDP Kit</span>
+          {APP_VERSION ? <span className="sidebar-brand-version">{APP_VERSION}</span> : null}
         </div>
         {loginname ? (
           <nav className="sidebar-nav">
