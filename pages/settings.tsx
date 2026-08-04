@@ -41,6 +41,13 @@ type NhsoStatus = { env: string; items: NhsoConfigItem[]; ready: boolean };
 
 type RegisterPreview = { hospitalCode: string; hospitalName: string; version: string };
 
+type UpdateInfo = {
+  supported: boolean;
+  current: string;
+  latest?: string;
+  hasUpdate?: boolean;
+};
+
 function validateConfig(config: Config): string | null {
   if (!config.host.trim()) return "กรุณาระบุ Host";
   if (!Number.isInteger(config.port) || config.port <= 0 || config.port > 65535) return "Port ไม่ถูกต้อง";
@@ -83,6 +90,9 @@ export default function Settings({
   const [activeTab, setActiveTab] = useState<"main" | "file43" | "nhso">("main");
   const [registerPrompt, setRegisterPrompt] = useState<RegisterPreview | null>(null);
   const [sendingRegister, setSendingRegister] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     // ช่วงติดตั้งครั้งแรกยังไม่มีค่าอะไรให้โหลด และคำขอจะถูกปฏิเสธเพราะยังไม่ได้
@@ -91,6 +101,7 @@ export default function Settings({
     fetchConfig();
     fetchConfig43();
     fetchRegisterPrompt();
+    checkUpdate();
   }, [needsSetupToken]);
 
   // ถามเรื่องลงทะเบียนหน่วยบริการครั้งเดียวหลังตั้งค่าเสร็จ
@@ -102,6 +113,50 @@ export default function Settings({
       if (res.ok && data.shouldAsk) setRegisterPrompt(data.preview);
     } catch {
       // ถามไม่ได้ก็ข้ามไป ไม่ใช่ส่วนที่จำเป็นต่อการใช้งาน
+    }
+  }
+
+  // manual = ผู้ใช้กดปุ่มเอง จึงควรตอบกลับให้เห็นผลเสมอ
+  // ส่วนการตรวจอัตโนมัติตอนเปิดหน้าให้เงียบไว้ ไม่งั้นจะเด้งข้อความทุกครั้งที่เข้าหน้านี้
+  async function checkUpdate(manual = false) {
+    setCheckingUpdate(true);
+    try {
+      const res = await fetch("/api/update");
+      const data = await res.json();
+      if (res.ok) {
+        setUpdateInfo(data);
+        if (manual && data.supported && !data.hasUpdate) {
+          showToast("ใช้เวอร์ชันล่าสุดอยู่แล้ว", "success");
+        }
+      } else if (manual) {
+        showToast(data.error || "ตรวจสอบเวอร์ชันใหม่ไม่สำเร็จ", "error");
+      }
+    } catch {
+      if (manual) showToast("ตรวจสอบเวอร์ชันใหม่ไม่สำเร็จ", "error");
+    } finally {
+      setCheckingUpdate(false);
+    }
+  }
+
+  async function runUpdate() {
+    const target = updateInfo?.latest || "เวอร์ชันล่าสุด";
+    if (!window.confirm(`อัปเดตเป็น ${target} ตอนนี้เลยไหม\n\nโปรแกรมจะปิดและเปิดใหม่เอง ผู้ใช้คนอื่นจะใช้งานไม่ได้ราวหนึ่งนาที\nค่าตั้งค่าทั้งหมดจะไม่หาย`)) {
+      return;
+    }
+    setUpdating(true);
+    try {
+      const res = await fetch("/api/update", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) showToast(data.message || "เริ่มอัปเดตแล้ว", "success");
+      else {
+        showToast(data.error || "เริ่มอัปเดตไม่สำเร็จ", "error");
+        setUpdating(false);
+      }
+      // ระหว่างอัปเดตเซิร์ฟเวอร์จะถูกปิด จึงคงปุ่มเป็นสถานะกำลังทำงานไว้
+      // ไม่ปลดล็อกกลับ เพื่อไม่ให้กดซ้ำระหว่างที่ไฟล์กำลังถูกสลับ
+    } catch {
+      // คำขอขาดกลางคันเป็นเรื่องปกติ เพราะเซิร์ฟเวอร์ถูกปิดไปแล้ว
+      showToast("เริ่มอัปเดตแล้ว รอสักครู่แล้วรีเฟรชหน้าเว็บ", "success");
     }
   }
 
@@ -319,6 +374,38 @@ export default function Settings({
                 spellCheck={false}
                 onChange={(e) => setSetupToken(e.target.value)}
               />
+            </div>
+          </div>
+        ) : null}
+
+        {updateInfo?.supported ? (
+          <div className="add-item-card" style={{ maxWidth: 560, marginBottom: 20 }}>
+            <div className="section-header">
+              <h2 className="section-title" style={{ margin: 0 }}>เวอร์ชันโปรแกรม</h2>
+              <span className={`status-pill ${updateInfo.hasUpdate ? "status-pending" : "status-y"}`}>
+                {updateInfo.hasUpdate ? `มีเวอร์ชันใหม่ ${updateInfo.latest}` : "ล่าสุดแล้ว"}
+              </span>
+            </div>
+            <div className="toolbar" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+              <span>เวอร์ชันที่ใช้อยู่</span>
+              <strong>{updateInfo.current || "(ไม่ทราบ)"}</strong>
+            </div>
+            {updateInfo.hasUpdate ? (
+              <p style={{ marginTop: 0, color: "var(--muted)" }}>
+                กดอัปเดตแล้วโปรแกรมจะดาวน์โหลดเวอร์ชันใหม่จาก GitHub ปิดตัวเองและเปิดใหม่โดยอัตโนมัติ
+                ใช้เวลาราวหนึ่งนาที <strong>ค่าตั้งค่าทั้งหมดไม่หาย</strong> ถ้าอัปเดตล้มเหลวระบบจะย้อนกลับ
+                เป็นเวอร์ชันเดิมให้เอง ควรทำตอนไม่มีคนใช้งาน
+              </p>
+            ) : null}
+            <div className="toolbar">
+              <button className="button-ghost" onClick={() => checkUpdate(true)} disabled={checkingUpdate || updating}>
+                {checkingUpdate ? "กำลังตรวจสอบ..." : "ตรวจสอบเวอร์ชันใหม่"}
+              </button>
+              {updateInfo.hasUpdate ? (
+                <button className="button-primary" onClick={runUpdate} disabled={updating}>
+                  {updating ? "กำลังอัปเดต..." : `อัปเดตเป็น ${updateInfo.latest}`}
+                </button>
+              ) : null}
             </div>
           </div>
         ) : null}
