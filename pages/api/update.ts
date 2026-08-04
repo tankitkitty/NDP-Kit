@@ -7,9 +7,11 @@ import { getAppVersion } from "../../lib/registry";
 import {
   ASSET_URL,
   buildUpdateScript,
+  clearUpdateStage,
   fetchLatestVersion,
   getInstallRoot,
   isNewer,
+  readUpdateStage,
 } from "../../lib/updater";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -19,6 +21,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const root = getInstallRoot();
   const current = getAppVersion();
+
+  // หน้าเว็บถามขั้นตอนที่กำลังทำอยู่ระหว่างอัปเดต แยกจากการตรวจเวอร์ชันใหม่
+  // เพราะระหว่างนี้ยังไม่ควรไปเรียก GitHub ซ้ำ (ช้าและไม่จำเป็น)
+  if (req.method === "GET" && req.query.stage !== undefined) {
+    return res.status(200).json({ stage: readUpdateStage(), current });
+  }
 
   if (req.method === "GET") {
     if (!root) {
@@ -48,6 +56,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     try {
       // เขียนสคริปต์ใหม่ทุกครั้ง เพื่อให้เครื่องที่ติดตั้งด้วยตัวช่วยรุ่นเก่าใช้ได้ด้วย
+      // ล้างสถานะของรอบก่อนทิ้ง ไม่งั้นหน้าเว็บจะอ่านเจอ done/failed ของเก่า
+      // แล้วรายงานว่าเสร็จตั้งแต่ยังไม่เริ่ม
+      clearUpdateStage();
+
       const scriptPath = path.join(root, "update.ps1");
       fs.writeFileSync(scriptPath, buildUpdateScript(ASSET_URL), "utf8");
 

@@ -25,6 +25,40 @@ export function isManagedInstall(): boolean {
   return getInstallRoot() !== null;
 }
 
+/** ขั้นตอนที่สคริปต์อัปเดตกำลังทำอยู่ อ่านจากไฟล์ที่สคริปต์เขียนไว้ */
+export type UpdateStage =
+  | "downloading"
+  | "stopping"
+  | "extracting"
+  | "restoring"
+  | "restarting"
+  | "done"
+  | "failed";
+
+export function readUpdateStage(): UpdateStage | null {
+  const root = getInstallRoot();
+  if (!root) return null;
+  try {
+    const p = path.join(root, "logs", "update-status.txt");
+    if (!fs.existsSync(p)) return null;
+    const raw = fs.readFileSync(p, "utf-8").trim();
+    return raw ? (raw as UpdateStage) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearUpdateStage(): void {
+  const root = getInstallRoot();
+  if (!root) return;
+  try {
+    const p = path.join(root, "logs", "update-status.txt");
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch {
+    // ลบไม่ได้ก็ไม่เป็นไร ไฟล์จะถูกเขียนทับตอนอัปเดตรอบหน้าอยู่แล้ว
+  }
+}
+
 /** "v2.0.1" -> [2, 0, 1] ส่วนที่อ่านเป็นตัวเลขไม่ได้ให้เป็น 0 */
 function parseVersion(v: string): number[] {
   return v
@@ -97,11 +131,17 @@ $zip     = Join-Path $env:TEMP 'ndp-kit-update.zip'
 $dataTmp = Join-Path $env:TEMP 'ndp-kit-data-keep'
 $logDir  = Join-Path $root 'logs'
 $log     = Join-Path $logDir 'update.log'
+$status  = Join-Path $logDir 'update-status.txt'
 
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 function Log($m) { "\$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  \$m" | Add-Content $log }
 
+# The web page polls this single-word file to show which step is running.
+# Written before each step so the UI never reports a step as finished early.
+function Status($s) { Set-Content $status $s -Encoding Ascii -NoNewline }
+
 Log 'update started'
+Status 'downloading'
 try {
   Log 'downloading package'
   Invoke-WebRequest '${assetUrl}' -OutFile $zip -UseBasicParsing -TimeoutSec 600
@@ -109,6 +149,7 @@ try {
 
   # Stop the running app only after the download succeeded, so a network
   # failure never leaves the site down.
+  Status 'stopping'
   Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
     Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
@@ -123,10 +164,12 @@ try {
   Move-Item $app $backup
   Log 'old version moved aside'
 
+  Status 'extracting'
   try {
     Expand-Archive -Path $zip -DestinationPath $app -Force
     Log 'new version extracted'
   } catch {
+    Status 'failed'
     Log "extract failed: \$(\$_.Exception.Message) - rolling back"
     if (Test-Path $app) { Remove-Item $app -Recurse -Force }
     Move-Item $backup $app
@@ -135,6 +178,7 @@ try {
     exit 1
   }
 
+  Status 'restoring'
   if (Test-Path $dataTmp) {
     Copy-Item $dataTmp (Join-Path $app 'data') -Recurse -Force
     Remove-Item $dataTmp -Recurse -Force
@@ -143,10 +187,13 @@ try {
   Remove-Item $backup -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item $zip -Force -ErrorAction SilentlyContinue
 
+  Status 'restarting'
   Start-Process 'wscript.exe' -ArgumentList "\`"\$(Join-Path \$root 'start.vbs')\`"" -WindowStyle Hidden
   Log 'app restarted - update complete'
+  Status 'done'
 } catch {
   Log "update failed: \$(\$_.Exception.Message)"
+  Status 'failed'
   # Last resort: make sure something is running again.
   Start-Process 'wscript.exe' -ArgumentList "\`"\$(Join-Path \$root 'start.vbs')\`"" -WindowStyle Hidden -ErrorAction SilentlyContinue
   exit 1

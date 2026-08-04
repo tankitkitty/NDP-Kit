@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type UpdateInfo = {
   supported: boolean;
@@ -8,17 +8,24 @@ type UpdateInfo = {
 };
 
 /**
- * แถบแจ้งเตือนเวอร์ชันใหม่บนหน้าหลัก
+ * ขั้นตอนที่หน้าเว็บ "มองเห็นได้จริง" ระหว่างอัปเดต
  *
- * จะไม่แสดงอะไรเลยเมื่อใช้เวอร์ชันล่าสุดอยู่แล้ว เพื่อไม่ให้หน้าหลักรกด้วยข้อมูล
- * ที่ผู้ใช้ไม่ต้องทำอะไรกับมัน — ขึ้นมาเมื่อมีของใหม่ให้กดจริงๆ เท่านั้น
- * และเงียบสนิทเมื่อตรวจสอบไม่สำเร็จ (เน็ตไม่ถึง GitHub) เพราะไม่ใช่เรื่องที่
- * เจ้าหน้าที่หน้างานต้องรับรู้หรือแก้ไขได้
+ * ช่วงดาวน์โหลดเซิร์ฟเวอร์ยังทำงานอยู่ จึงถามสถานะจริงได้ พอถึงช่วงสลับไฟล์
+ * เซิร์ฟเวอร์จะถูกปิด อ่านอะไรไม่ได้เลย เราจึงไม่แสร้งทำเป็นรู้ว่าอยู่ขั้นย่อยไหน
+ * แต่บอกตรงๆ ว่ากำลังติดตั้งและรอเปิดใหม่ แล้วจับสัญญาณว่ากลับมาแล้วหรือยัง
  */
+const STEPS = [
+  { key: "downloading", label: "ดาวน์โหลดไฟล์เวอร์ชันใหม่" },
+  { key: "installing", label: "ติดตั้งและเปิดโปรแกรมใหม่" },
+  { key: "done", label: "เสร็จสมบูรณ์" },
+] as const;
+
 export default function UpdateBanner() {
   const [info, setInfo] = useState<UpdateInfo | null>(null);
-  const [updating, setUpdating] = useState(false);
-  const [message, setMessage] = useState("");
+  const [stepIndex, setStepIndex] = useState(-1);
+  const [elapsed, setElapsed] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const startedAt = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,45 +44,139 @@ export default function UpdateBanner() {
     };
   }, []);
 
+  // นับเวลาที่ผ่านไป เพื่อให้ผู้ใช้เห็นว่าระบบยังเดินอยู่ ไม่ได้ค้าง
+  useEffect(() => {
+    if (stepIndex < 0 || stepIndex >= STEPS.length - 1) return;
+    const t = setInterval(() => setElapsed(Math.round((Date.now() - startedAt.current) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [stepIndex]);
+
   async function runUpdate() {
+    const target = info?.latest;
     if (
       !window.confirm(
-        `อัปเดตเป็น ${info?.latest} ตอนนี้เลยไหม\n\n` +
+        `อัปเดตเป็น ${target} ตอนนี้เลยไหม\n\n` +
           `โปรแกรมจะปิดและเปิดใหม่เอง ผู้ใช้คนอื่นจะใช้งานไม่ได้ราวหนึ่งนาที\n` +
           `ค่าตั้งค่าทั้งหมดจะไม่หาย`
       )
     ) {
       return;
     }
-    setUpdating(true);
-    setMessage("กำลังดาวน์โหลดและติดตั้งเวอร์ชันใหม่ กรุณารอสักครู่แล้วรีเฟรชหน้าเว็บ");
+
+    startedAt.current = Date.now();
+    setStepIndex(0);
+    setFailed(false);
+
     try {
       await fetch("/api/update", { method: "POST" });
     } catch {
       // คำขอขาดกลางคันเป็นเรื่องปกติ เพราะเซิร์ฟเวอร์ถูกปิดระหว่างอัปเดต
     }
+
+    // ถามสถานะทุก 2 วินาที ระหว่างที่เซิร์ฟเวอร์ยังตอบได้
+    // พอตอบไม่ได้ = เข้าช่วงสลับไฟล์แล้ว และเมื่อกลับมาพร้อมเวอร์ชันใหม่ = เสร็จ
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch("/api/update?stage=1", { cache: "no-store" });
+        const data = await res.json();
+
+        if (data.stage === "failed") {
+          setFailed(true);
+          clearInterval(poll);
+          return;
+        }
+        if (target && data.current === target) {
+          setStepIndex(STEPS.length - 1);
+          clearInterval(poll);
+          setTimeout(() => window.location.reload(), 1500);
+          return;
+        }
+        if (data.stage && data.stage !== "downloading") setStepIndex(1);
+      } catch {
+        // เซิร์ฟเวอร์ปิดอยู่ = กำลังสลับไฟล์ ยังไม่ถือว่าล้มเหลว
+        setStepIndex((s) => (s < 1 ? 1 : s));
+      }
+    }, 2000);
   }
 
   if (!info) return null;
 
+  const running = stepIndex >= 0;
+  const percent = running ? Math.round(((stepIndex + 1) / STEPS.length) * 100) : 0;
+  const finished = stepIndex === STEPS.length - 1;
+
   return (
     <div className="page-card" style={{ marginBottom: 20 }}>
       <div className="section-header">
-        <h2 className="section-title" style={{ margin: 0 }}>มีเวอร์ชันใหม่ให้อัปเดต</h2>
+        <h2 className="section-title" style={{ margin: 0 }}>
+          {running ? "กำลังอัปเดตโปรแกรม" : "มีเวอร์ชันใหม่ให้อัปเดต"}
+        </h2>
         <span className="status-pill status-pending">{info.latest}</span>
       </div>
-      <p style={{ marginTop: 0, color: "var(--muted)" }}>
-        เวอร์ชันที่ใช้อยู่คือ <strong>{info.current || "(ไม่ทราบ)"}</strong> —
-        กดอัปเดตแล้วโปรแกรมจะดาวน์โหลดจาก GitHub ปิดตัวเองและเปิดใหม่โดยอัตโนมัติ
-        ใช้เวลาราวหนึ่งนาที <strong>ค่าตั้งค่าทั้งหมดไม่หาย</strong>
-        ถ้าอัปเดตล้มเหลวระบบจะย้อนกลับเป็นเวอร์ชันเดิมให้เอง ควรทำตอนไม่มีคนใช้งาน
-      </p>
-      {message ? <p style={{ color: "var(--muted)" }}>{message}</p> : null}
-      <div className="toolbar">
-        <button className="button-primary" onClick={runUpdate} disabled={updating}>
-          {updating ? "กำลังอัปเดต..." : `อัปเดตเป็น ${info.latest}`}
-        </button>
-      </div>
+
+      {!running ? (
+        <>
+          <p style={{ marginTop: 0, color: "var(--muted)" }}>
+            เวอร์ชันที่ใช้อยู่คือ <strong>{info.current || "(ไม่ทราบ)"}</strong> —
+            กดอัปเดตแล้วโปรแกรมจะดาวน์โหลดจาก GitHub ปิดตัวเองและเปิดใหม่โดยอัตโนมัติ
+            ใช้เวลาราวหนึ่งนาที <strong>ค่าตั้งค่าทั้งหมดไม่หาย</strong>
+            ถ้าอัปเดตล้มเหลวระบบจะย้อนกลับเป็นเวอร์ชันเดิมให้เอง ควรทำตอนไม่มีคนใช้งาน
+          </p>
+          <div className="toolbar">
+            <button className="button-primary" onClick={runUpdate}>
+              อัปเดตเป็น {info.latest}
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div
+            style={{
+              height: 10,
+              borderRadius: 999,
+              background: "var(--border, #e4e7ec)",
+              overflow: "hidden",
+              marginBottom: 12,
+            }}
+            role="progressbar"
+            aria-valuenow={percent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              style={{
+                width: `${percent}%`,
+                height: "100%",
+                background: failed ? "#b42318" : "var(--button)",
+                transition: "width 0.4s ease",
+              }}
+            />
+          </div>
+
+          {failed ? (
+            <p style={{ marginTop: 0, color: "#b42318" }}>
+              อัปเดตไม่สำเร็จ ระบบย้อนกลับเป็นเวอร์ชันเดิมและเปิดโปรแกรมให้แล้ว
+              รายละเอียดดูได้ที่ <code>C:\NDPKit\logs\update.log</code> หรือเมนู 3 ของตัวช่วยติดตั้ง
+            </p>
+          ) : (
+            <>
+              <p style={{ marginTop: 0 }}>
+                <strong>
+                  ขั้นที่ {Math.min(stepIndex + 1, STEPS.length)} จาก {STEPS.length} :{" "}
+                  {STEPS[Math.min(stepIndex, STEPS.length - 1)].label}
+                </strong>
+              </p>
+              <p style={{ marginTop: 0, color: "var(--muted)" }}>
+                {finished
+                  ? "กำลังโหลดหน้าเว็บใหม่..."
+                  : stepIndex === 0
+                    ? `ผ่านไป ${elapsed} วินาที — ความเร็วขึ้นกับอินเทอร์เน็ตของหน่วยบริการ ระหว่างนี้ยังใช้งานโปรแกรมได้ตามปกติ`
+                    : `ผ่านไป ${elapsed} วินาที — โปรแกรมกำลังปิดและเปิดใหม่ หน้าเว็บจะกลับมาเองอัตโนมัติ อย่าเพิ่งปิดหน้านี้`}
+              </p>
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }

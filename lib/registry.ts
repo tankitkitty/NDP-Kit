@@ -14,41 +14,37 @@ const DEFAULT_REGISTRY_URL =
 
 export const REGISTRY_URL = (process.env.REGISTRY_URL || DEFAULT_REGISTRY_URL).trim();
 
-// บันทึกว่าเคยถามไปแล้ว เพื่อไม่ให้ถามซ้ำทุกครั้งที่เปิดหน้าตั้งค่า
+// บันทึกคำตอบของแบบฟอร์มยินยอม และเวอร์ชันที่รายงานไปแล้ว
 // เก็บใน data/ เหมือนค่าตั้งค่าอื่น จึงติดไปกับเครื่องนั้นและไม่หายตอนอัปเดต
-const answeredPath = path.join(process.cwd(), "data", ".registered");
+const consentPath = path.join(process.cwd(), "data", ".registered");
 
 export function isRegistryEnabled(): boolean {
   return REGISTRY_URL.length > 0;
 }
 
-export type AnsweredRecord = {
-  /** ผู้ใช้กดยินยอมให้ส่งหรือไม่ — ถ้าปฏิเสธจะไม่ส่งอะไรอีกเลย */
-  sent: boolean;
-  at: string;
-  /** เวอร์ชันที่รายงานไปแล้วล่าสุด ใช้ดูว่าต้องส่งอัปเดตซ้ำไหม */
+export type ConsentRecord = {
+  /** ผู้ใช้กดยินยอมหรือไม่ — ถ้าไม่ยินยอมจะไม่ส่งอะไรออกไปอีกเลย */
+  consent: boolean;
+  /** เวอร์ชันที่รายงานไปแล้วล่าสุด (มีค่าเมื่อยินยอมและส่งสำเร็จ) */
   version?: string;
+  at: string;
 };
 
-export function readAnswered(): AnsweredRecord | null {
+export function readConsent(): ConsentRecord | null {
   try {
-    if (!fs.existsSync(answeredPath)) return null;
-    return JSON.parse(fs.readFileSync(answeredPath, "utf-8")) as AnsweredRecord;
+    if (!fs.existsSync(consentPath)) return null;
+    return JSON.parse(fs.readFileSync(consentPath, "utf-8")) as ConsentRecord;
   } catch {
     return null;
   }
 }
 
-export function hasAnswered(): boolean {
-  return readAnswered() !== null;
-}
-
-export function markAnswered(sent: boolean, version: string): void {
+export function saveConsent(consent: boolean, version?: string): void {
   try {
-    fs.mkdirSync(path.dirname(answeredPath), { recursive: true });
+    fs.mkdirSync(path.dirname(consentPath), { recursive: true });
     fs.writeFileSync(
-      answeredPath,
-      JSON.stringify({ sent, at: new Date().toISOString(), version }, null, 2),
+      consentPath,
+      JSON.stringify({ consent, version, at: new Date().toISOString() }, null, 2),
       { encoding: "utf-8", mode: 0o600 }
     );
   } catch {
@@ -65,11 +61,14 @@ export function getAppVersion(): string {
   return "";
 }
 
+/**
+ * ส่งเท่าที่แบบฟอร์มยินยอมระบุไว้เท่านั้น คือรหัสสถานบริการกับเวอร์ชันโปรแกรม
+ * ไม่ส่งชื่อสถานพยาบาล เพราะข้อความในฟอร์มเขียนว่า "เท่านั้น" ไว้ชัดเจน
+ * ส่วนวันเวลาที่รับ ฝั่ง Google Sheet เป็นคนบันทึกเองตอนได้รับ
+ */
 export type RegistryPayload = {
   hospitalCode: string;
-  hospitalName: string;
   version: string;
-  sentAt: string;
 };
 
 /**

@@ -4,7 +4,7 @@ import { getSession } from "../lib/session";
 import { getHospitalName } from "../lib/db";
 import Layout from "../components/Layout";
 import UpdateBanner from "../components/UpdateBanner";
-import RegistrySync from "../components/RegistrySync";
+import ConsentDialog from "../components/ConsentDialog";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const session = getSession(context.req);
@@ -18,7 +18,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 export default function Home({ loginname, hospitalName }: { loginname: string; hospitalName: string }) {
   return (
     <Layout loginname={loginname} hospitalName={hospitalName}>
-      <RegistrySync />
+      <ConsentDialog />
       <UpdateBanner />
       <div className="page-card">
         <div className="brand" style={{ marginBottom: 24 }}>
