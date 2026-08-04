@@ -1,7 +1,7 @@
 # Build Docker image อัตโนมัติทุกครั้งที่ push tag เวอร์ชัน (v1.2.3)
-# แล้วเผยแพร่ที่ ghcr.io/tankitkitty/13filetools ให้หน่วยบริการ pull ไปใช้
+# แล้วเผยแพร่ที่ ghcr.io/tankitkitty/ndp-kit ให้หน่วยบริการ pull ไปใช้
 #
-# ครั้งแรกหลัง workflow นี้รันสำเร็จ: เข้า GitHub → Packages → 13filetools →
+# ครั้งแรกหลัง workflow นี้รันสำเร็จ: เข้า GitHub → Packages → ndp-kit →
 # Package settings → เปลี่ยน visibility เป็น Public เพื่อให้หน่วยบริการ pull ได้โดยไม่ต้อง login
 name: docker-release
 

@@ -53,7 +53,7 @@ export default function Login({ hospitalName }: { hospitalName: string }) {
   return (
     <div className="container">
       <Head>
-        <title>เข้าสู่ระบบ - 13File Tools</title>
+        <title>เข้าสู่ระบบ - NDP Kit</title>
       </Head>
       <div className="page-card" style={{ maxWidth: 420, margin: "80px auto" }}>
         <div className="toolbar" style={{ justifyContent: "space-between", marginBottom: 8 }}>
@@ -72,7 +72,7 @@ export default function Login({ hospitalName }: { hospitalName: string }) {
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginBottom: 8 }}>
           <Logo size={56} />
           <div style={{ textAlign: "center" }}>
-            <h1 className="page-title" style={{ fontSize: "1.8rem", marginBottom: 4 }}>13File Tools</h1>
+            <h1 className="page-title" style={{ fontSize: "1.8rem", marginBottom: 4 }}>NDP Kit</h1>
             <p className="brand-subtitle" style={{ margin: 0 }}>เข้าสู่ระบบเพื่อดำเนินการต่อ</p>
           </div>
         </div>

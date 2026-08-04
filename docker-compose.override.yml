@@ -7,5 +7,5 @@
 # จึงดึง image สำเร็จรูปจาก ghcr.io ตามปกติ — ไม่ต้องแก้อะไร
 
 services:
-  13file-tools:
+  ndp-kit:
     build: .

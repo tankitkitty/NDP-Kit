@@ -1,6 +1,6 @@
-# คู่มือการติดตั้ง 13File Tools
+# คู่มือการติดตั้ง NDP Kit
 
-เอกสารนี้อธิบายขั้นตอนติดตั้งและตั้งค่า 13File Tools ตั้งแต่เริ่มต้นจนใช้งานได้จริง
+เอกสารนี้อธิบายขั้นตอนติดตั้งและตั้งค่า NDP Kit ตั้งแต่เริ่มต้นจนใช้งานได้จริง
 
 > **วิธีที่ง่ายที่สุด: ติดตั้งด้วย Docker** — ไม่ต้องลง Node.js/Git และอัปเดตด้วยคำสั่งเดียว ดู[ขั้นตอนที่ 0](#0-ติดตั้งด้วย-docker-แนะนำ--ง่ายที่สุด) ด้านล่าง (ขั้นตอนที่ 1-6 สำหรับการติดตั้งแบบดั้งเดิมเท่านั้น)
 
@@ -11,8 +11,8 @@
 1. สร้างโฟลเดอร์สำหรับติดตั้ง แล้วดาวน์โหลดไฟล์ `docker-compose.yml` จาก GitHub มาวางไว้:
 
    ```bash
-   mkdir 13file-tools && cd 13file-tools
-   curl -o docker-compose.yml https://raw.githubusercontent.com/tankitkitty/13FileTools/master/docker-compose.yml
+   mkdir ndp-kit && cd ndp-kit
+   curl -o docker-compose.yml https://raw.githubusercontent.com/tankitkitty/ndp-kit/master/docker-compose.yml
    ```
 
    (หรือคัดลอกไฟล์ `docker-compose.yml` จากโปรเจกต์มาวางเองก็ได้ — ใช้ไฟล์เดียวพอ ไม่ต้องโคลนทั้งโปรเจกต์)
@@ -23,7 +23,7 @@
    docker compose up -d
    ```
 
-   ครั้งแรก Docker จะดาวน์โหลด image สำเร็จรูปจาก `ghcr.io/tankitkitty/13filetools` ให้อัตโนมัติ
+   ครั้งแรก Docker จะดาวน์โหลด image สำเร็จรูปจาก `ghcr.io/tankitkitty/ndp-kit` ให้อัตโนมัติ
 
 3. เปิดเบราว์เซอร์ไปที่ `http://localhost:3000` (หรือ `http://<IP เครื่องนี้>:3000` จากเครื่องอื่นในวง LAN) แล้วตั้งค่าฐานข้อมูลผ่านหน้า `/settings` ตามขั้นตอนที่ 7 — ค่าตั้งจะถูกเก็บในโฟลเดอร์ `./data` ข้างไฟล์ compose (mount เป็น volume) จึง**ไม่หายเวลาอัปเดต**
 
@@ -59,8 +59,8 @@ docker compose up -d
 โคลนโปรเจกต์ แล้ว **checkout ไปที่เวอร์ชัน release ล่าสุด** (ไม่ควรใช้ branch `master` ตรง ๆ เพราะอาจมีโค้ดที่กำลังพัฒนาค้างอยู่):
 
 ```bash
-git clone https://github.com/tankitkitty/13FileTools.git
-cd 13FileTools
+git clone https://github.com/tankitkitty/ndp-kit.git
+cd ndp-kit
 git fetch --tags
 git checkout v1.0.0     # ใช้ tag ล่าสุด — ดูรายการด้วย: git tag -l
 ```

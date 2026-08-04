@@ -7,12 +7,12 @@
 > ดังนั้นทุกครั้งที่จะปล่อยของใหม่ ต้อง (1) commit → (2) ตั้ง tag เวอร์ชันใหม่ → (3) push ทั้ง commit และ tag
 >
 > **Docker image อัตโนมัติ:** เมื่อ push tag `v*` ขึ้น GitHub, workflow `.github/workflows/docker-release.yml`
-> จะ build image แล้วเผยแพร่ที่ `ghcr.io/tankitkitty/13filetools` (tag: `latest`, `1.1.0`, `1.1`) ให้เอง —
+> จะ build image แล้วเผยแพร่ที่ `ghcr.io/tankitkitty/ndp-kit` (tag: `latest`, `1.1.0`, `1.1`) ให้เอง —
 > หน่วยบริการที่ติดตั้งแบบ Docker แค่รัน `docker compose pull && docker compose up -d` ก็ได้เวอร์ชันใหม่
 >
 > **visibility ของ image:** ตรวจกับของจริงแล้วตอนปล่อย v1.1.0 — GitHub ตั้ง package เป็น **Public ให้อัตโนมัติ**
 > เพราะ repo นี้เป็น public หน่วยบริการจึง `docker pull` ได้ทันทีโดยไม่ต้อง login (ไม่ต้องทำอะไรเพิ่ม)
-> ถ้าวันหนึ่งหน่วยบริการ pull แล้วขึ้น `unauthorized` ค่อยไปตั้งเองที่ repo → Packages → `13filetools` →
+> ถ้าวันหนึ่งหน่วยบริการ pull แล้วขึ้น `unauthorized` ค่อยไปตั้งเองที่ repo → Packages → `ndp-kit` →
 > Package settings → Change visibility → Public
 
 ---
@@ -23,13 +23,13 @@
 
 ```bash
 git remote -v
-# ควรเห็น: origin  https://github.com/tankitkitty/13FileTools.git
+# ควรเห็น: origin  https://github.com/tankitkitty/ndp-kit.git
 ```
 
 ถ้ายังไม่มี ให้เพิ่ม:
 
 ```bash
-git remote add origin https://github.com/tankitkitty/13FileTools.git
+git remote add origin https://github.com/tankitkitty/ndp-kit.git
 ```
 
 **เรื่อง login GitHub:** ตอน push ครั้งแรก GitHub จะให้ยืนยันตัวตน
@@ -77,7 +77,7 @@ git diff --cached --name-only | grep -E 'dbconfig|session-secret|\.env' || echo 
 git commit -m "อธิบายสั้นๆ ว่าเวอร์ชันนี้แก้/เพิ่มอะไร"
 
 # 5) ตั้ง tag เวอร์ชันใหม่ (annotated tag)
-git tag -a v1.1.0 -m "13File Tools v1.1.0 - สรุปสิ่งที่เปลี่ยน"
+git tag -a v1.1.0 -m "NDP Kit v1.1.0 - สรุปสิ่งที่เปลี่ยน"
 
 # 6) push ทั้ง commit และ tag ขึ้น GitHub
 git push origin master
@@ -100,7 +100,7 @@ git push origin v1.1.0
 git push origin master --tags
 ```
 
-หลัง push แล้ว เข้าไปดูที่ `https://github.com/tankitkitty/13FileTools/tags` ควรเห็น `v1.0.0`
+หลัง push แล้ว เข้าไปดูที่ `https://github.com/tankitkitty/ndp-kit/tags` ควรเห็น `v1.0.0`
 
 ---
 
@@ -121,7 +121,7 @@ git push origin master --tags
 เมื่อคุณ push เวอร์ชันใหม่แล้ว แจ้งหน่วยบริการให้รันคำสั่งนี้บนเครื่องที่ติดตั้งไว้:
 
 ```bash
-cd 13FileTools
+cd ndp-kit
 git fetch --tags
 git checkout v1.1.0     # เปลี่ยนเป็นเวอร์ชันใหม่ล่าสุด
 npm install             # เผื่อมี dependency ใหม่

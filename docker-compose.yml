@@ -1,4 +1,4 @@
-# 13File Tools — รันด้วย Docker
+# NDP Kit — รันด้วย Docker
 #
 # ติดตั้งครั้งแรก:   docker compose up -d
 # อัปเดตเวอร์ชันใหม่: docker compose pull && docker compose up -d
@@ -8,14 +8,14 @@
 # ./data ข้างไฟล์นี้ — อัปเดต image กี่ครั้งค่าตั้งก็ไม่หาย
 
 services:
-  13file-tools:
+  ndp-kit:
     # image สำเร็จรูปที่ GitHub Actions build ให้ตอนออกเวอร์ชัน — หน่วยบริการใช้ไฟล์นี้
     # ไฟล์เดียวก็ติดตั้งได้ ไม่ต้องมีโค้ด/Node ในเครื่อง
     # ตรึงเวอร์ชันได้โดยเปลี่ยน latest เป็นเลขเวอร์ชัน เช่น :1.1.0
-    image: ghcr.io/tankitkitty/13filetools:latest
+    image: ghcr.io/tankitkitty/ndp-kit:latest
     # หมายเหตุสำหรับผู้พัฒนา: ถ้าโคลนโปรเจกต์เต็มมา จะมีไฟล์ docker-compose.override.yml
     # ที่สั่ง build จากโค้ดในเครื่องให้อัตโนมัติ (Docker Compose รวมไฟล์ override ให้เอง)
-    container_name: 13file-tools
+    container_name: ndp-kit
     restart: unless-stopped
     ports:
       # เปลี่ยนพอร์ตฝั่งเครื่อง host ได้โดยสร้างไฟล์ .env ข้างไฟล์นี้ ใส่ APP_PORT=3013

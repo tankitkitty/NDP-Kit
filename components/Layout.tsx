@@ -49,13 +49,13 @@ export default function Layout({ title, loginname, hospitalName, fullWidth, chil
   return (
     <div className="app-shell">
       <Head>
-        <title>{title ? `${title} - 13File Tools` : "13File Tools"}</title>
+        <title>{title ? `${title} - NDP Kit` : "NDP Kit"}</title>
       </Head>
 
       <aside className={`sidebar ${mobileOpen ? "open" : ""}`}>
         <div className="sidebar-brand">
           <Logo size={40} />
-          <span className="sidebar-brand-name">13File Tools</span>
+          <span className="sidebar-brand-name">NDP Kit</span>
         </div>
         {loginname ? (
           <nav className="sidebar-nav">
@@ -93,7 +93,7 @@ export default function Layout({ title, loginname, hospitalName, fullWidth, chil
           <button className="hamburger-btn" onClick={() => setMobileOpen(true)} aria-label="เปิดเมนู">
             ☰
           </button>
-          <span className="topbar-title">13File Tools</span>
+          <span className="topbar-title">NDP Kit</span>
         </div>
         <div className="app-content" style={fullWidth ? { maxWidth: "none" } : undefined}>
           {children}

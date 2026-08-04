@@ -8,6 +8,11 @@ tsconfig.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-data/dbconfig.json
-data/dbconfig43.json
-data/.session-secret
+# ไฟล์ตั้งค่า/ความลับของแต่ละหน่วยบริการ — เขียนแบบไม่ผูกกับรากโปรเจกต์
+# เพื่อให้ครอบ data/ ที่ตัวช่วยติดตั้งสร้างไว้ในโฟลเดอร์ย่อยด้วย (เช่น install/data/)
+dbconfig.json
+dbconfig43.json
+.session-secret
+
+# ไฟล์ที่ตัวช่วยติดตั้งสร้างเองตอนรัน ไม่ใช่ซอร์ส
+install/docker-compose.yml

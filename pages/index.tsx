@@ -19,7 +19,7 @@ export default function Home({ loginname, hospitalName }: { loginname: string; h
       <div className="page-card">
         <div className="brand" style={{ marginBottom: 24 }}>
           <div>
-            <h1 className="page-title" style={{ marginBottom: 0 }}>13File Tools</h1>
+            <h1 className="page-title" style={{ marginBottom: 0 }}>NDP Kit</h1>
             <p className="brand-subtitle">จัดการรายการข้อมูลของคุณได้ในที่เดียว</p>
           </div>
         </div>
