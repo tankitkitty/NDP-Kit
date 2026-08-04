@@ -10,7 +10,10 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest เร็วขึ้นมากเมื่อไม่วาดแถบ
 
 $APP_NAME     = 'NDP Kit'
-$INSTALL_DIR  = 'C:\NDPKit'
+$INSTALL_DIR  = 'C:\NDP-Kit'
+# ชื่อโฟลเดอร์เดิมก่อนเปลี่ยนมาใช้ขีดกลาง เครื่องที่ติดตั้งไว้ก่อนหน้านี้จะถูกย้ายมา
+# ให้อัตโนมัติตอนกดเมนู 1 (ดู Move-OldInstall) จะได้ไม่เกิดสองชุดแย่งพอร์ตกัน
+$OLD_INSTALL_DIR = 'C:\NDPKit'
 $APP_URL      = 'https://github.com/tankitkitty/NDP-Kit/releases/latest/download/ndp-kit.zip'
 $APP_ZIP_NAME = 'ndp-kit.zip'
 $NODE_VER     = 'v24.19.0'
@@ -18,6 +21,9 @@ $NODE_ZIP     = "node-$NODE_VER-win-x64.zip"
 $NODE_URL     = "https://nodejs.org/dist/$NODE_VER/$NODE_ZIP"
 $NODE_SHA_URL = "https://nodejs.org/dist/$NODE_VER/SHASUMS256.txt"
 $PORTS        = @(3000, 3013, 3113, 3213)
+# คงชื่อ task เดิมไว้แม้โฟลเดอร์จะเปลี่ยนชื่อ เพราะการเปลี่ยนชื่อ task จะทำให้ task
+# เก่าค้างอยู่ในเครื่องโดยชี้ไปพาธที่ถูกย้ายไปแล้ว แล้วเด้ง error ทุกครั้งที่ล็อกอิน
+# ใช้ชื่อเดิมทำให้ตัวติดตั้งเขียนทับ task เดิมด้วยพาธใหม่ให้เองในขั้นตอนปกติ
 $TASK_NAME    = 'NDPKit'
 
 $NodeExe   = Join-Path $INSTALL_DIR 'node\node.exe'
@@ -156,19 +162,45 @@ function Ensure-Node {
 }
 
 # ------------------------------------------------------------- จัดการโปรแกรม
-function Get-AppProcesses {
+function Get-AppProcesses([string]$root = $INSTALL_DIR) {
   try {
     return @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
-      Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($INSTALL_DIR, [StringComparison]::OrdinalIgnoreCase) })
+      Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) })
   } catch { return @() }
 }
 
-function Stop-App {
-  $procs = Get-AppProcesses
+function Stop-App([string]$root = $INSTALL_DIR) {
+  $procs = Get-AppProcesses $root
   if ($procs.Count -eq 0) { return $false }
   foreach ($p in $procs) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
   Start-Sleep -Seconds 2
   return $true
+}
+
+# เดิมโปรแกรมติดตั้งที่ C:\NDPKit ต่อมาเปลี่ยนเป็น C:\NDP-Kit ให้อ่านง่ายขึ้น
+# ถ้าปล่อยไว้เฉยๆ ตัวติดตั้งจะสร้างชุดใหม่ขึ้นมาอีกชุด แล้วชุดเก่าที่ยังทำงานอยู่
+# จะจองพอร์ตไว้ ทำให้ชุดใหม่เปิดไม่ขึ้น และค่าตั้งค่าเดิมก็ค้างอยู่ที่เก่า
+# จึงย้ายทั้งโฟลเดอร์มาให้ ค่าตั้งค่าและ log เดิมตามมาครบ
+function Move-OldInstall {
+  if (-not (Test-Path $OLD_INSTALL_DIR)) { return }
+
+  if (Test-Path $INSTALL_DIR) {
+    Warn "พบโฟลเดอร์เก่า $OLD_INSTALL_DIR ค้างอยู่ แต่ $INSTALL_DIR มีอยู่แล้ว"
+    Step '  จะใช้โฟลเดอร์ใหม่ต่อไป - ลบโฟลเดอร์เก่าเองได้เมื่อแน่ใจว่าไม่ต้องการแล้ว'
+    [void](Stop-App $OLD_INSTALL_DIR)
+    return
+  }
+
+  Step "พบการติดตั้งเดิมที่ $OLD_INSTALL_DIR - กำลังย้ายมาที่ $INSTALL_DIR"
+  [void](Stop-App $OLD_INSTALL_DIR)
+  try { $null = schtasks /delete /tn $TASK_NAME /f 2>&1 } catch {}
+  try {
+    Move-Item $OLD_INSTALL_DIR $INSTALL_DIR -Force
+    Ok 'ย้ายเรียบร้อย ค่าตั้งค่าเดิมอยู่ครบ ไม่ต้องตั้งค่าใหม่'
+  } catch {
+    Err "ย้ายโฟลเดอร์ไม่สำเร็จ: $($_.Exception.Message)"
+    Step '  ปิดโปรแกรมที่ใช้ไฟล์ในโฟลเดอร์นั้นอยู่ แล้วลองใหม่อีกครั้ง'
+  }
 }
 
 function Start-App {
@@ -216,6 +248,7 @@ function Get-InstalledVersion {
 # ----------------------------------------------------------------- ติดตั้ง
 function Invoke-Install {
   Head "ขั้นตอนที่ 1/5 : เตรียม Node.js"
+  Move-OldInstall
   if (-not (Test-Path $INSTALL_DIR)) { New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null }
   if (-not (Ensure-Node)) { Pause-Back; return }
 

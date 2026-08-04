@@ -156,7 +156,7 @@ export default function UpdateBanner() {
           {failed ? (
             <p style={{ marginTop: 0, color: "#b42318" }}>
               อัปเดตไม่สำเร็จ ระบบย้อนกลับเป็นเวอร์ชันเดิมและเปิดโปรแกรมให้แล้ว
-              รายละเอียดดูได้ที่ <code>C:\NDPKit\logs\update.log</code> หรือเมนู 3 ของตัวช่วยติดตั้ง
+              รายละเอียดดูได้ที่ <code>C:\NDP-Kit\logs\update.log</code> หรือเมนู 3 ของตัวช่วยติดตั้ง
             </p>
           ) : (
             <>

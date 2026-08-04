@@ -37,7 +37,7 @@ function normalize(value: string): string {
  *   1. env SETUP_TOKEN — ตัวช่วยติดตั้งสุ่มให้แล้วแสดงบนจอตอนติดตั้ง
  *   2. data/.setup-token — สำหรับคนที่รัน server.js เองโดยไม่ผ่านตัวช่วยติดตั้ง
  *      แอปจะสุ่มให้เองครั้งแรก เก็บไฟล์ไว้สิทธิ์ 0600 แล้วพิมพ์ลง log
- *      (ตัวช่วยติดตั้งเก็บ log ไว้ที่ C:\NDPKit\logs\app.log ดูได้จากเมนู 3)
+ *      (ตัวช่วยติดตั้งเก็บ log ไว้ที่ C:\NDP-Kit\logs\app.log ดูได้จากเมนู 3)
  */
 export function getSetupToken(): string {
   const fromEnv = process.env.SETUP_TOKEN;

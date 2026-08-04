@@ -7,9 +7,9 @@ export const ASSET_URL = `https://github.com/${REPO}/releases/latest/download/nd
 
 /**
  * โปรแกรมถูกติดตั้งโดยตัวช่วยติดตั้งไว้แบบนี้
- *   C:\NDPKit\app\      <- cwd ตอนรัน (server.js อยู่ที่นี่)
- *   C:\NDPKit\node\node.exe
- *   C:\NDPKit\start.vbs
+ *   C:\NDP-Kit\app\      <- cwd ตอนรัน (server.js อยู่ที่นี่)
+ *   C:\NDP-Kit\node\node.exe
+ *   C:\NDP-Kit\start.vbs
  * การอัปเดตในตัวจึงทำได้เฉพาะเมื่อเจอโครงสร้างนี้ครบ ถ้ารันจากซอร์สโค้ดของนักพัฒนา
  * (npm run dev) จะไม่มีไฟล์พวกนี้ ต้องไม่ให้กดอัปเดตได้
  */
