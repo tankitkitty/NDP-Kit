@@ -25,6 +25,7 @@ export default function UpdateBanner() {
   const [stepIndex, setStepIndex] = useState(-1);
   const [elapsed, setElapsed] = useState(0);
   const [failed, setFailed] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const [startError, setStartError] = useState("");
   const startedAt = useRef(0);
 
@@ -67,6 +68,7 @@ export default function UpdateBanner() {
     startedAt.current = Date.now();
     setStepIndex(0);
     setFailed(false);
+    setBlocked(false);
     setStartError("");
 
     // ต้องตรวจผลของคำสั่งเริ่มอัปเดตด้วย ถ้าเซิร์ฟเวอร์เริ่มให้ไม่ได้ (เช่นเขียนไฟล์
@@ -103,7 +105,18 @@ export default function UpdateBanner() {
           setTimeout(() => window.location.reload(), 1500);
           return;
         }
-        if (data.stage && data.stage !== "downloading") setStepIndex(1);
+
+        // ยังค้างที่ "สั่งไปแล้ว" แปลว่าสคริปต์ไม่เคยเริ่มทำงานเลย ไม่ใช่ดาวน์โหลดช้า
+        // 30 วินาทีเผื่อเครื่องช้ามากแล้ว ถ้าเกินนี้ถือว่าไม่ได้เริ่มจริง
+        if (data.stage === "starting" && Date.now() - startedAt.current > 30000) {
+          setBlocked(true);
+          clearInterval(poll);
+          return;
+        }
+
+        if (data.stage && data.stage !== "starting" && data.stage !== "downloading") {
+          setStepIndex(1);
+        }
       } catch {
         // เซิร์ฟเวอร์ปิดอยู่ = กำลังสลับไฟล์ ยังไม่ถือว่าล้มเหลว
         setStepIndex((s) => (s < 1 ? 1 : s));
@@ -164,13 +177,20 @@ export default function UpdateBanner() {
               style={{
                 width: `${percent}%`,
                 height: "100%",
-                background: failed ? "#b42318" : "var(--button)",
+                background: failed || blocked ? "#b42318" : "var(--button)",
                 transition: "width 0.4s ease",
               }}
             />
           </div>
 
-          {failed ? (
+          {blocked ? (
+            <p style={{ marginTop: 0, color: "#b42318" }}>
+              ตัวอัปเดตไม่เริ่มทำงาน โปรแกรมสั่งเปิดให้แล้วแต่ไม่มีอะไรเกิดขึ้น
+              มักเกิดจากโปรแกรมป้องกันไวรัสสกัดการเปิด PowerShell แบบเบื้องหลังไว้ —
+              <strong> ให้อัปเดตผ่านตัวช่วยติดตั้งแทน โดยรัน ndp-kit-setup.bat แล้วเลือกเมนู 1</strong>{" "}
+              (ปลอดภัย ไฟล์และค่าตั้งค่าเดิมยังอยู่ครบ ไม่มีอะไรถูกเปลี่ยนจากการกดปุ่มนี้)
+            </p>
+          ) : failed ? (
             <p style={{ marginTop: 0, color: "#b42318" }}>
               อัปเดตไม่สำเร็จ ระบบย้อนกลับเป็นเวอร์ชันเดิมและเปิดโปรแกรมให้แล้ว
               รายละเอียดดูได้ที่ <code>C:\NDP-Kit\logs\update.log</code> หรือเมนู 3 ของตัวช่วยติดตั้ง

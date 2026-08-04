@@ -25,8 +25,18 @@ export function isManagedInstall(): boolean {
   return getInstallRoot() !== null;
 }
 
-/** ขั้นตอนที่สคริปต์อัปเดตกำลังทำอยู่ อ่านจากไฟล์ที่สคริปต์เขียนไว้ */
+/**
+ * ขั้นตอนที่การอัปเดตกำลังทำอยู่ อ่านจากไฟล์สถานะ
+ *
+ * "starting" เขียนโดยตัวโปรแกรมเองก่อนสั่งเปิดสคริปต์ ส่วนค่าอื่นเขียนโดยสคริปต์
+ * ความต่างนี้สำคัญมาก เพราะถ้าค้างอยู่ที่ starting นานผิดปกติ แปลว่าสคริปต์ไม่เคย
+ * ถูกเรียกให้ทำงานเลย (มักโดนโปรแกรมป้องกันไวรัสสกัด เพราะเป็นการเปิด PowerShell
+ * แบบซ่อนหน้าต่างจาก process เบื้องหลัง) ซึ่งต่างจากการดาวน์โหลดช้าโดยสิ้นเชิง
+ * ถ้าไม่แยกสองกรณีนี้ หน้าเว็บจะขึ้นว่า "กำลังดาวน์โหลด" ค้างไปเรื่อยๆ ทั้งที่ไม่มี
+ * อะไรเกิดขึ้นเลย
+ */
 export type UpdateStage =
+  | "starting"
   | "downloading"
   | "stopping"
   | "extracting"
@@ -45,6 +55,18 @@ export function readUpdateStage(): UpdateStage | null {
     return raw ? (raw as UpdateStage) : null;
   } catch {
     return null;
+  }
+}
+
+export function writeUpdateStage(stage: UpdateStage): void {
+  const root = getInstallRoot();
+  if (!root) return;
+  try {
+    const dir = path.join(root, "logs");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "update-status.txt"), stage, "utf8");
+  } catch {
+    // เขียนไม่ได้ก็แค่ทำให้หน้าเว็บบอกความคืบหน้าละเอียดน้อยลง ไม่กระทบการอัปเดต
   }
 }
 

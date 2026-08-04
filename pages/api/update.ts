@@ -12,6 +12,7 @@ import {
   getInstallRoot,
   isNewer,
   readUpdateStage,
+  writeUpdateStage,
 } from "../../lib/updater";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -63,6 +64,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const scriptPath = path.join(root, "update.ps1");
       fs.writeFileSync(scriptPath, buildUpdateScript(ASSET_URL), "utf8");
 
+      // ทำเครื่องหมายว่า "สั่งไปแล้ว" ก่อนเปิดสคริปต์ ถ้าค้างอยู่ที่สถานะนี้นานผิดปกติ
+      // แปลว่าสคริปต์ไม่เคยถูกเรียกให้ทำงาน (มักโดนโปรแกรมป้องกันไวรัสสกัด)
+      // ซึ่งเป็นคนละเรื่องกับดาวน์โหลดช้า และต้องแนะนำผู้ใช้คนละแบบ
+      writeUpdateStage("starting");
+
       // ต้อง detached เพราะสคริปต์จะปิด process นี้ทิ้งระหว่างทาง
       // ถ้าไม่แยกกลุ่ม process ตัวอัปเดตจะโดนปิดตามไปด้วยแล้วค้างครึ่งทาง
       const child = spawn(
@@ -70,6 +76,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", scriptPath],
         { detached: true, stdio: "ignore", windowsHide: true }
       );
+      // ChildProcess ที่ไม่มีคนดัก error จะโยน exception ออกมาแบบไม่มีใครรับ
+      // แล้วทำให้ทั้งเซิร์ฟเวอร์ดับ ทั้งที่ผู้ใช้แค่กดปุ่มอัปเดต
+      child.on("error", () => undefined);
       child.unref();
 
       return res.status(200).json({
