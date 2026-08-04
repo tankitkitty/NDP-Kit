@@ -12,8 +12,8 @@ import {
 /**
  * แบบฟอร์มยินยอมส่งข้อมูลการใช้งาน และการรายงานไปยัง Google Sheet ของผู้พัฒนา
  *
- * ส่งเฉพาะ "รหัสสถานบริการ" กับ "เวอร์ชันโปรแกรม" ตามที่ระบุไว้ในแบบฟอร์ม
- * ไม่มีข้อมูลผู้ป่วย ข้อมูลส่วนบุคคล หรือแม้แต่ชื่อสถานพยาบาล
+ * ส่งเฉพาะรหัส/ชื่อสถานพยาบาล เวอร์ชันโปรแกรม และวันเวลาที่ส่ง ตามที่ระบุไว้
+ * ในแบบฟอร์มยินยอม ไม่มีข้อมูลผู้ป่วยหรือข้อมูลส่วนบุคคลใดๆ
  *
  * GET  -> บอกว่าต้องแสดงแบบฟอร์มไหม และถ้ายินยอมไว้แล้วกับเพิ่งอัปเดตเวอร์ชัน
  *         จะรายงานเวอร์ชันใหม่ให้เงียบๆ ตามความยินยอมเดิม
@@ -39,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const info = await getHospitalInfo();
       return res.status(200).json({
         needConsent: true,
-        preview: { hospitalCode: info.code, version },
+        preview: { hospitalCode: info.code, hospitalName: info.name, version },
       });
     }
 
@@ -49,7 +49,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       try {
         const info = await getHospitalInfo();
         if (info.code) {
-          await sendToRegistry({ hospitalCode: info.code, version });
+          await sendToRegistry({
+            hospitalCode: info.code,
+            hospitalName: info.name,
+            version,
+            sentAt: new Date().toISOString(),
+          });
           saveConsent(true, version);
         }
       } catch {
@@ -73,15 +78,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    try {
-      await sendToRegistry({ hospitalCode: info.code, version });
-      saveConsent(true, version);
-      return res.status(200).json({ message: "ขอบคุณครับ ส่งข้อมูลเรียบร้อยแล้ว" });
-    } catch (error: any) {
-      return res.status(502).json({
-        error: `ส่งข้อมูลไม่สำเร็จ: ${error?.message || "เชื่อมต่อปลายทางไม่ได้"}`,
+    // บันทึกความยินยอมก่อน แล้วตอบกลับทันที ไม่ให้ผู้ใช้ค้างรอหน้าจอ
+    //
+    // ยังไม่บันทึกเลขเวอร์ชันตรงนี้ เพราะยังไม่รู้ว่าส่งสำเร็จไหม การเว้นไว้ทำให้
+    // เงื่อนไข "ยินยอมแล้วแต่เวอร์ชันที่รายงานไม่ตรง" ใน GET เป็นจริง ระบบจึงลอง
+    // ส่งซ้ำให้เองทุกครั้งที่เปิดหน้าแรก จนกว่าจะสำเร็จ แล้วค่อยบันทึกเวอร์ชันปิดงาน
+    saveConsent(true);
+
+    void sendToRegistry({
+      hospitalCode: info.code,
+      hospitalName: info.name,
+      version,
+      sentAt: new Date().toISOString(),
+    })
+      .then(() => saveConsent(true, version))
+      .catch(() => {
+        // ส่งไม่สำเร็จก็ปล่อยไว้ ไม่ต้องแจ้งผู้ใช้ เพราะจะลองใหม่ให้เองรอบหน้า
       });
-    }
+
+    return res.status(200).json({ message: "บันทึกความยินยอมแล้ว ขอบคุณครับ" });
   }
 
   res.setHeader("Allow", ["GET", "POST"]);

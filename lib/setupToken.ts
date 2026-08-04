@@ -3,6 +3,8 @@ import fs from "fs";
 import path from "path";
 
 const tokenFilePath = path.join(process.cwd(), "data", ".setup-token");
+const setupDonePath = path.join(process.cwd(), "data", ".setup-done");
+const mainConfigPath = path.join(process.cwd(), "data", "dbconfig.json");
 
 // ตัวอักษรที่อ่านสับสนกันง่ายถูกตัดออกหมด (I, O, 0, 1) เพราะผู้ใช้ต้องอ่านรหัส
 // จากหน้าจอตัวช่วยติดตั้งแล้วพิมพ์ใส่หน้าเว็บเอง
@@ -71,7 +73,60 @@ export function getSetupToken(): string {
   }
 }
 
+/**
+ * ช่วงติดตั้งจบลงเมื่อ "เข้าสู่ระบบสำเร็จครั้งแรก" ไม่ใช่ตอนบันทึกค่าฐานข้อมูล
+ *
+ * เดิมปิดตอนบันทึกค่าสำเร็จ ซึ่งผิด เพราะขั้นตอนตามคู่มือคือกด Save Config แล้ว
+ * ต่อด้วย Test Connection ตอนนั้นยังล็อกอินไม่ได้ (ยังไม่รู้ด้วยซ้ำว่าต่อฐานติดไหม)
+ * พอบันทึกเสร็จรหัสติดตั้งถูกลบทันที ปุ่ม Test Connection จึงถูกปฏิเสธ 401 ทุกครั้ง
+ *
+ * การล็อกอินได้สำเร็จเป็นหลักฐานว่าตั้งค่าฐานข้อมูลถูกต้องแล้วจริง และมีเจ้าหน้าที่
+ * ตัวจริงเข้ามาดูแลแล้ว จึงเป็นจุดปิดที่ถูกต้องทั้งด้านการใช้งานและความปลอดภัย
+ */
+export function isSetupComplete(): boolean {
+  try {
+    return fs.existsSync(setupDonePath);
+  } catch {
+    return false;
+  }
+}
+
+export function markSetupComplete(): void {
+  try {
+    fs.mkdirSync(path.dirname(setupDonePath), { recursive: true });
+    fs.writeFileSync(setupDonePath, new Date().toISOString(), {
+      encoding: "utf-8",
+      mode: 0o600,
+    });
+    // รหัสติดตั้งหมดหน้าที่แล้ว ลบไฟล์ทิ้งไม่ให้เหลือความลับค้างบนดิสก์
+    if (fs.existsSync(tokenFilePath)) fs.unlinkSync(tokenFilePath);
+    cachedToken = null;
+  } catch {
+    // เขียนไม่ได้ก็ยังปลอดภัย เพราะยังต้องมี session ถึงจะแก้ค่าตั้งค่าได้อยู่ดี
+  }
+}
+
+/**
+ * เครื่องที่ "เริ่มโปรแกรมขึ้นมาโดยมี dbconfig.json อยู่แล้ว" คือเครื่องที่ติดตั้ง
+ * เสร็จไปตั้งแต่รอบก่อน รวมถึงเครื่องที่อัปเกรดมาจากรุ่นที่ยังไม่มีไฟล์ marker นี้
+ * ต้องถือว่าจบช่วงติดตั้งทันที ไม่งั้นการอัปเดตโปรแกรมจะเปิดช่องให้ใช้รหัสติดตั้ง
+ * แก้ค่าฐานข้อมูลได้อีกครั้งโดยไม่ต้องล็อกอิน
+ *
+ * ทำงานตอนโหลดโมดูลครั้งเดียวเท่านั้น จึงไม่ไปปิดช่วงติดตั้งของเครื่องใหม่ที่เพิ่ง
+ * กด Save Config ระหว่างที่โปรแกรมกำลังทำงานอยู่
+ */
+(function migrateSetupState() {
+  try {
+    if (fs.existsSync(mainConfigPath) && !fs.existsSync(setupDonePath)) {
+      markSetupComplete();
+    }
+  } catch {
+    // ตรวจไม่ได้ก็ปล่อยไป ยังมีการตรวจ session เป็นด่านหลักอยู่
+  }
+})();
+
 export function verifySetupToken(provided: string | undefined): boolean {
+  if (isSetupComplete()) return false;
   if (!provided) return false;
   const expected = Buffer.from(getSetupToken(), "utf-8");
   const actual = Buffer.from(normalize(provided), "utf-8");
@@ -79,18 +134,6 @@ export function verifySetupToken(provided: string | undefined): boolean {
   return crypto.timingSafeEqual(expected, actual);
 }
 
-/**
- * ตั้งค่าฐานข้อมูลหลักสำเร็จแล้ว = จบช่วงติดตั้ง รหัสไม่มีประโยชน์อีก
- * ลบไฟล์ทิ้งเพื่อไม่ให้เหลือความลับค้างอยู่บนดิสก์โดยไม่จำเป็น
- */
-export function clearSetupToken(): void {
-  cachedToken = null;
-  try {
-    if (fs.existsSync(tokenFilePath)) fs.unlinkSync(tokenFilePath);
-  } catch {
-    // ลบไม่ได้ก็ไม่เป็นไร — ช่วง bootstrap จบไปแล้วตามเงื่อนไขใน authGuard
-  }
-}
 
 // จำกัดการเดารหัสต่อ IP เช่นเดียวกับหน้าเข้าสู่ระบบ เพราะรหัส 8 ตัวจากชุด 32 ตัว
 // จะปลอดภัยจริงก็ต่อเมื่อเดารัวๆ ไม่ได้

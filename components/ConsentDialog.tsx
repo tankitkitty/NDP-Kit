@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-type Preview = { hospitalCode: string; version: string };
+type Preview = { hospitalCode: string; hospitalName: string; version: string };
 
 /**
  * แบบฟอร์มขอความยินยอมส่งข้อมูลการใช้งาน แสดงครั้งเดียวตอนตั้งค่าครั้งแรก
@@ -45,14 +45,15 @@ export default function ConsentDialog() {
       });
       const data = await res.json();
       if (res.ok) {
+        // ฝั่งเซิร์ฟเวอร์บันทึกความยินยอมแล้วและจะส่งข้อมูลให้เองเบื้องหลัง
+        // ปิดหน้าต่างได้เลยโดยไม่ต้องรอผลการส่ง
         setPreview(null);
       } else {
-        // ส่งไม่สำเร็จให้ฟอร์มค้างไว้ จะได้กดใหม่ได้เมื่อเน็ตกลับมา
-        setError(data.error || "ส่งข้อมูลไม่สำเร็จ");
+        setError(data.error || "บันทึกไม่สำเร็จ");
         setBusy(false);
       }
     } catch {
-      setError("ส่งข้อมูลไม่สำเร็จ กรุณาลองใหม่");
+      setError("บันทึกไม่สำเร็จ กรุณาลองใหม่");
       setBusy(false);
     }
   }
@@ -67,7 +68,7 @@ export default function ConsentDialog() {
         </h2>
         <p style={{ marginTop: 0 }}>
           เพื่อให้ผู้พัฒนาทราบยอดการใช้งานโปรแกรม และแจ้งเตือนได้เมื่อมีเวอร์ชันใหม่
-          ขอความยินยอมส่งข้อมูล <strong>เพียง 2 รายการนี้เท่านั้น</strong>
+          ขอความยินยอมส่งข้อมูล <strong>เพียง 4 รายการนี้เท่านั้น</strong>
         </p>
         <div className="grid-form" style={{ marginBottom: 16 }}>
           <div className="toolbar" style={{ justifyContent: "space-between" }}>
@@ -75,12 +76,20 @@ export default function ConsentDialog() {
             <strong>{preview.hospitalCode || "(ไม่พบในฐานข้อมูล)"}</strong>
           </div>
           <div className="toolbar" style={{ justifyContent: "space-between" }}>
+            <span>ชื่อสถานพยาบาล</span>
+            <strong>{preview.hospitalName || "(ไม่พบในฐานข้อมูล)"}</strong>
+          </div>
+          <div className="toolbar" style={{ justifyContent: "space-between" }}>
             <span>เวอร์ชันโปรแกรม</span>
             <strong>{preview.version || "(ไม่ทราบ)"}</strong>
           </div>
+          <div className="toolbar" style={{ justifyContent: "space-between" }}>
+            <span>วันเวลาที่ส่ง</span>
+            <strong>ขณะที่กดยินยอม</strong>
+          </div>
         </div>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
-          <strong>ไม่มีข้อมูลผู้ป่วย ข้อมูลส่วนบุคคล หรือชื่อสถานพยาบาล</strong> รวมอยู่ด้วย
+          <strong>ไม่มีข้อมูลผู้ป่วยหรือข้อมูลส่วนบุคคลใดๆ</strong> รวมอยู่ด้วย
           จะยินยอมหรือไม่ก็ใช้งานโปรแกรมได้ครบทุกอย่างเหมือนกัน และระบบจะถามเพียงครั้งเดียว
         </p>
         {error ? (
@@ -88,7 +97,7 @@ export default function ConsentDialog() {
         ) : null}
         <div className="toolbar">
           <button className="button-primary" onClick={() => answer(true)} disabled={busy}>
-            {busy ? "กำลังส่ง..." : "ยินยอม"}
+            {busy ? "กำลังบันทึก..." : "ยินยอม"}
           </button>
           <button className="button-ghost" onClick={() => answer(false)} disabled={busy}>
             ไม่ยินยอม

@@ -1,9 +1,10 @@
-import fs from "fs";
-import path from "path";
 import { getSession } from "./session";
-import { isSetupRateLimited, recordSetupFailure, verifySetupToken } from "./setupToken";
-
-const mainConfigPath = path.join(process.cwd(), "data", "dbconfig.json");
+import {
+  isSetupComplete,
+  isSetupRateLimited,
+  recordSetupFailure,
+  verifySetupToken,
+} from "./setupToken";
 
 export const SETUP_TOKEN_HEADER = "x-setup-token";
 
@@ -14,13 +15,11 @@ type GuardRequest = {
 };
 
 /**
- * ช่วงติดตั้งครั้งแรก: ยังไม่มีไฟล์ตั้งค่าฐานข้อมูลหลัก แปลว่ายังเชื่อมต่อ DB
- * ไม่ได้ จึงยัง login ไม่ได้ ต้องเปิดหน้า/หน้า API ตั้งค่าให้เข้าถึงได้ก่อน
- * เมื่อตั้งค่าเสร็จ (ไฟล์ถูกสร้าง) การเข้าถึง config/test-connection ทั้งหมด
- * จะต้องมี session เสมอ
+ * ยังอยู่ในช่วงติดตั้งครั้งแรกหรือไม่ — จบเมื่อเข้าสู่ระบบสำเร็จครั้งแรก
+ * (ดูเหตุผลที่ไม่ใช้ "มี dbconfig.json แล้ว" เป็นเกณฑ์ ใน lib/setupToken.ts)
  */
 export function isBootstrapPhase(): boolean {
-  return !fs.existsSync(mainConfigPath);
+  return !isSetupComplete();
 }
 
 function headerValue(req: GuardRequest, name: string): string | undefined {

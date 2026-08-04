@@ -62,13 +62,15 @@ export function getAppVersion(): string {
 }
 
 /**
- * ส่งเท่าที่แบบฟอร์มยินยอมระบุไว้เท่านั้น คือรหัสสถานบริการกับเวอร์ชันโปรแกรม
- * ไม่ส่งชื่อสถานพยาบาล เพราะข้อความในฟอร์มเขียนว่า "เท่านั้น" ไว้ชัดเจน
- * ส่วนวันเวลาที่รับ ฝั่ง Google Sheet เป็นคนบันทึกเองตอนได้รับ
+ * ต้องตรงกับรายการที่แสดงในแบบฟอร์มยินยอม (components/ConsentDialog.tsx) เสมอ
+ * ถ้าจะเพิ่มหรือลดฟิลด์ ต้องแก้ข้อความในฟอร์มให้ตรงกันด้วย ไม่งั้นฟอร์มจะระบุ
+ * ไม่ตรงกับสิ่งที่โปรแกรมส่งจริง
  */
 export type RegistryPayload = {
   hospitalCode: string;
+  hospitalName: string;
   version: string;
+  sentAt: string;
 };
 
 /**
@@ -76,11 +78,14 @@ export type RegistryPayload = {
  * ทำให้ไม่ติดเรื่อง CORS และ URL ปลายทางไม่โผล่ในหน้าเว็บให้ใครก็ได้เอาไปยิงเล่น
  */
 export async function sendToRegistry(payload: RegistryPayload): Promise<void> {
+  // ให้เวลานานหน่อย เพราะ Google Apps Script เปลี่ยนเส้นทางไปอีกโดเมนหนึ่ง
+  // และถ้าสคริปต์ไม่ถูกเรียกมาสักพักจะมี cold start อีกหลายวินาที รวมกับเน็ต
+  // ของโรงพยาบาลที่มักช้า เวลา 15 วินาทีเดิมจึงหมดก่อนบ่อยจนส่งไม่สำเร็จ
   const res = await fetch(REGISTRY_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(60000),
   });
   if (!res.ok) throw new Error(`ปลายทางตอบกลับรหัส ${res.status}`);
 }

@@ -14,6 +14,7 @@ dbconfig.json
 dbconfig43.json
 .session-secret
 .setup-token
+.setup-done
 .registered
 
 # ไฟล์ที่ตัวช่วยติดตั้ง/ผู้ดูแลวางไว้ข้างสคริปต์สำหรับติดตั้งแบบออฟไลน์

@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import crypto from "crypto";
 import { query } from "../../lib/db";
 import { createSessionValue, SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from "../../lib/session";
+import { markSetupComplete } from "../../lib/setupToken";
 
 // จำกัดการลองเข้าสู่ระบบต่อ IP เพื่อกันการเดารหัสผ่านแบบ brute force
 // เก็บในหน่วยความจำ (เหมาะกับแอปแบบ instance เดียวที่ติดตั้งในหน่วยบริการ)
@@ -85,6 +86,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     failedAttempts.delete(ip);
+
+    // เข้าสู่ระบบได้สำเร็จ = ตั้งค่าฐานข้อมูลถูกต้องแล้วจริง และมีเจ้าหน้าที่ตัวจริง
+    // เข้ามาดูแลแล้ว จึงปิดช่วงติดตั้งตรงนี้ รหัสติดตั้งครั้งแรกจะใช้ไม่ได้อีก
+    markSetupComplete();
 
     const sessionValue = createSessionValue(user.officer_login_name);
     const secureFlag = process.env.NODE_ENV === "production" ? "; Secure" : "";

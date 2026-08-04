@@ -4,7 +4,6 @@ import path from "path";
 import { parseDbConfig, readStoredConfig } from "../../lib/db";
 import { checkConfigAccess } from "../../lib/authGuard";
 import { writeSecretJsonFile } from "../../lib/configSecurity";
-import { clearSetupToken } from "../../lib/setupToken";
 
 const configPath = path.join(process.cwd(), "data", "dbconfig.json");
 
@@ -43,9 +42,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       await fs.mkdir(path.dirname(configPath), { recursive: true });
       await writeSecretJsonFile(configPath, config);
-      // ไฟล์นี้ถูกสร้างแล้ว = จบช่วงติดตั้ง ต่อจากนี้ต้องมี session เสมอ
-      // รหัสติดตั้งครั้งแรกจึงหมดหน้าที่ ลบทิ้งไม่ให้ค้างอยู่บนดิสก์
-      clearSetupToken();
+      // ไม่ปิดช่วงติดตั้งตรงนี้ เพราะขั้นตอนถัดไปตามคู่มือคือกด Test Connection
+      // ซึ่งตอนนั้นยังล็อกอินไม่ได้ ช่วงติดตั้งจะปิดเมื่อเข้าสู่ระบบสำเร็จครั้งแรก
       return res.status(200).json({ message: "บันทึกการตั้งค่าฐานข้อมูลสำเร็จ" });
     } catch (error) {
       return res.status(500).json({ error: "ไม่สามารถบันทึกการตั้งค่าได้" });
