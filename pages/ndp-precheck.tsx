@@ -39,7 +39,7 @@ type CardMeta = { id: string; title: string; description: string; needsRange?: b
 const QUERY_CARDS: CardMeta[] = [
   { id: "deformed-no", title: "เลขบัตรผู้พิการตรงกับเลขบัตรประชาชน", description: "person_deformed.deformed_no ต้องเท่ากับ person.cid (ตัดขีดออก)" },
   { id: "po-code", title: "รหัสไปรษณีย์ผู้ป่วยครบ 5 หลัก", description: "patient.po_code ที่ไม่ว่างต้องเป็นตัวเลข 5 หลักพอดี" },
-  { id: "provider", title: "ข้อมูลบุคลากรทางการแพทย์ (PROVIDER)", description: "เลขใบประกอบวิชาชีพ / เลขบัตร ปชช. / provider_type / รหัสสภาวิชาชีพ (01-07) ต้องครบ" },
+  { id: "provider", title: "ข้อมูลบุคลากรทางการแพทย์ (PROVIDER)", description: "เลขใบประกอบวิชาชีพ / เลขบัตร ปชช. / provider_type ต้องครบ และกลุ่มวิชาชีพ (แพทย์ ทันตแพทย์ พยาบาล เภสัชกร ฯลฯ) ต้องมีรหัสสภาวิชาชีพ 01-08" },
   { id: "pttype-config", title: "การตั้งค่าสิทธิการรักษา (pttype)", description: "noexpire / export_eclaim / is_pttype_plan / default_request_funds / paidst='02' / price group (1=OFC/LGO, 2=UC/WEL)" },
   { id: "token", title: "Token สำหรับส่งแฟ้ม 13 แฟ้ม", description: "sys_var (%token%) ต้องมีค่า และ NHSO token ต้องยังไม่หมดอายุ" },
   { id: "drug-catalog", title: "รหัสยาเทียบ Drug Catalog / TMT", description: "sks_drug_code, ราคา และหมวด income ต้องตรงกับ Drug Catalog รายการล่าสุด" },
@@ -150,6 +150,8 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
   const [activeTab, setActiveTab] = useState(TABS[0].key);
   // แท็บย่อยของตารางผลตรวจในแต่ละการ์ด เก็บแยกกันด้วยคีย์ "<id การ์ด>#<ลำดับตาราง>"
   const [sectionTab, setSectionTab] = useState<Record<string, string>>({});
+  // ตารางที่กำลังสร้างไฟล์ Excel อยู่ (คีย์เดียวกับ sectionTab) เพื่อกันกดซ้ำ
+  const [exportingKey, setExportingKey] = useState<string | null>(null);
 
   // เปิดแท็บตามที่ลิงก์ระบุมา เช่น /ndp-precheck?tab=master จากหน้า setup-checklist
   // ต้องทำใน effect ไม่ใช่ค่าเริ่มต้นของ useState เพราะ router.query ยังว่างตอน render แรก
@@ -240,6 +242,47 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
     setRunningAll(false);
   }
 
+  /**
+   * ส่งออกตารางที่กำลังแสดงอยู่เป็นไฟล์ Excel
+   *
+   * ส่งเฉพาะแถวที่เห็นอยู่จริง (ผ่านการกรองด้วยแท็บย่อยแล้ว) ไม่ใช่ทั้งชุด
+   * เพราะที่ผู้ใช้กดคือ "เอารายการที่เห็นตรงหน้านี้ออกไป"
+   */
+  async function exportRows(
+    key: string,
+    filename: string,
+    columns: CheckColumn[],
+    rows: Record<string, unknown>[]
+  ) {
+    setExportingKey(key);
+    try {
+      const res = await fetch("/api/precheck/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename, columns, rows }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "ส่งออกไฟล์ไม่สำเร็จ");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${filename}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // ปล่อย object URL ทิ้ง ไม่งั้นไฟล์ค้างในหน่วยความจำจนกว่าจะปิดแท็บ
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      alert("เรียก API ไม่สำเร็จ");
+    } finally {
+      setExportingKey(null);
+    }
+  }
+
   async function executeFix() {
     if (!fixTarget) return;
     setFixRunning(true);
@@ -300,9 +343,25 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
       }
     }
 
+    // ชื่อไฟล์เอาชื่อหัวข้อการ์ดนำหน้า จะได้รู้ว่าไฟล์ไหนมาจากการตรวจอะไรตอนเปิดทีหลัง
+    const cardTitle = QUERY_CARDS.find((c) => c.id === cardId)?.title || cardId;
+    const exportName = `${cardTitle}${section.title ? ` - ${section.title}` : ""}`;
+    const exportKey = `${cardId}#${idx}`;
+
     return (
       <div key={idx} style={{ marginTop: idx === 0 ? 0 : 16 }}>
-        {section.title ? <div className="precheck-section-title">{section.title}</div> : null}
+        <div className="precheck-section-head">
+          {section.title ? <div className="precheck-section-title">{section.title}</div> : <span />}
+          {shown.length > 0 ? (
+            <button
+              className="button-ghost precheck-small-btn"
+              onClick={() => exportRows(exportKey, exportName, section.columns, shown)}
+              disabled={exportingKey === exportKey}
+            >
+              {exportingKey === exportKey ? "กำลังสร้างไฟล์..." : "ส่งออก Excel"}
+            </button>
+          ) : null}
+        </div>
 
         {graded ? (
           <>

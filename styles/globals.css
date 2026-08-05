@@ -1136,8 +1136,21 @@ a.version-check-new:hover {
   vertical-align: middle;
 }
 
+/* หัวตารางย่อย: ชื่อตารางชิดซ้าย ปุ่มส่งออกชิดขวาในบรรทัดเดียวกัน */
+.precheck-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* บรรทัดเงื่อนไขการตรวจของแต่ละหัวข้อ — เป็นข้อมูลที่คนใช้ต้องอ่านจริง (บอกว่า
+   ต้องลงรหัสอะไรบ้างถึงจะเบิกได้) ไม่ใช่คำอธิบายประกอบ จึงใช้สีฟ้าเข้มตัวหนา
+   ไม่ใช่สีเทาจางแบบเดิมที่กวาดตาผ่านไปเลย */
 .precheck-card-desc {
-  color: var(--muted);
+  color: #1d4ed8;
+  font-weight: 600;
   font-size: 0.85rem;
   margin-top: 2px;
 }
