@@ -292,6 +292,13 @@ function Invoke-Install {
   }
 
   try {
+    # ล้างของค้างจากการอัปเดตในหน้าเว็บที่ยังสลับไฟล์ไม่เสร็จ ไม่งั้น start.cmd
+    # จะเอา app.new เก่ากว่ามาทับตัวที่เพิ่งติดตั้งใหม่ตอนเปิดโปรแกรมครั้งถัดไป
+    Remove-Item (Join-Path $INSTALL_DIR 'app.new') -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $INSTALL_DIR 'app.old') -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $INSTALL_DIR 'logs\update-status.txt') -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $INSTALL_DIR 'update.ps1') -Force -ErrorAction SilentlyContinue
+
     Remove-Item $AppDir -Recurse -Force -ErrorAction SilentlyContinue
     Expand-Archive -Path $zip -DestinationPath $AppDir -Force
   } catch {
@@ -333,10 +340,27 @@ function Invoke-Install {
   # (cmd.exe อ่านทีละไบต์ตาม code page ภาษาไทยจะทำให้ตัวแยกคำสั่งเลื่อนตำแหน่ง)
   $cmd = @"
 @echo off
+cd /d "%~dp0"
+if not exist "logs" mkdir "logs"
+
+rem Apply a staged update before starting node.
+rem Files of a running app are locked by Windows, so this is the only safe moment
+rem to swap them. The app downloads and extracts the new version into app.new by
+rem itself, then restarts; this block does the actual replacement.
+if exist "app.new\server.js" (
+  echo [%date% %time%] applying staged update>>"logs\update.log"
+  if exist "app\data" xcopy /E /I /Y /Q "app\data" "app.new\data" >nul
+  if exist "app.old" rmdir /S /Q "app.old"
+  if exist "app" move "app" "app.old">nul
+  move "app.new" "app">nul
+  if exist "app.old" rmdir /S /Q "app.old"
+  echo done>"logs\update-status.txt"
+  echo [%date% %time%] update applied>>"logs\update.log"
+)
+
 cd /d "%~dp0app"
 set "PORT=$port"
 set "SETUP_TOKEN=$setupToken"
-if not exist "%~dp0logs" mkdir "%~dp0logs"
 "%~dp0node\node.exe" server.js >> "%~dp0logs\app.log" 2>&1
 "@
   Set-Content $StartCmd $cmd -Encoding Ascii

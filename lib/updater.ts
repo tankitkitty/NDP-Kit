@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import AdmZip from "adm-zip";
 
 const REPO = "tankitkitty/NDP-Kit";
 const LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`;
@@ -28,22 +29,50 @@ export function isManagedInstall(): boolean {
 /**
  * ขั้นตอนที่การอัปเดตกำลังทำอยู่ อ่านจากไฟล์สถานะ
  *
- * "starting" เขียนโดยตัวโปรแกรมเองก่อนสั่งเปิดสคริปต์ ส่วนค่าอื่นเขียนโดยสคริปต์
- * ความต่างนี้สำคัญมาก เพราะถ้าค้างอยู่ที่ starting นานผิดปกติ แปลว่าสคริปต์ไม่เคย
- * ถูกเรียกให้ทำงานเลย (มักโดนโปรแกรมป้องกันไวรัสสกัด เพราะเป็นการเปิด PowerShell
- * แบบซ่อนหน้าต่างจาก process เบื้องหลัง) ซึ่งต่างจากการดาวน์โหลดช้าโดยสิ้นเชิง
- * ถ้าไม่แยกสองกรณีนี้ หน้าเว็บจะขึ้นว่า "กำลังดาวน์โหลด" ค้างไปเรื่อยๆ ทั้งที่ไม่มี
- * อะไรเกิดขึ้นเลย
+ * ทุกสถานะเขียนโดยตัวโปรแกรมเองทั้งหมด ไม่พึ่งสคริปต์ภายนอกอีกต่อไป
+ *
+ * เดิมให้สคริปต์ PowerShell เป็นคนดาวน์โหลดและรายงานสถานะ แต่พบที่หน่วยบริการจริงว่า
+ * ระบบของเครื่องสกัดการเปิด PowerShell แบบซ่อนหน้าต่างจาก process เบื้องหลังไว้
+ * สคริปต์จึงไม่เคยถูกเรียกให้ทำงาน ไม่มีใครเขียน log ไม่มีใครเขียนสถานะ หน้าเว็บ
+ * เลยค้างที่ "กำลังดาวน์โหลด" ตลอดไปโดยไม่มีอะไรบอกสาเหตุ
+ *
+ * ตอนนี้ตัวโปรแกรมดาวน์โหลดและแตกไฟล์เองด้วย Node ความผิดพลาดทุกแบบจึงกลายเป็น
+ * ข้อความที่รายงานให้ผู้ใช้เห็นได้ทันที เหลือให้ตัวช่วยภายนอกทำแค่ขั้นสลับไฟล์
+ * และเปิดโปรแกรมใหม่เท่านั้น
  */
 export type UpdateStage =
-  | "starting"
   | "downloading"
-  | "stopping"
   | "extracting"
-  | "restoring"
+  /** แตกไฟล์เสร็จ รอสลับไฟล์ตอนเปิดโปรแกรมครั้งถัดไป */
+  | "staged"
   | "restarting"
   | "done"
   | "failed";
+
+/** ข้อความอธิบายสาเหตุตอนล้มเหลว ให้ผู้ใช้เห็นว่าเกิดอะไรขึ้นจริงๆ */
+export function readUpdateError(): string {
+  const root = getInstallRoot();
+  if (!root) return "";
+  try {
+    const p = path.join(root, "logs", "update-error.txt");
+    if (!fs.existsSync(p)) return "";
+    return fs.readFileSync(p, "utf-8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function writeUpdateError(message: string): void {
+  const root = getInstallRoot();
+  if (!root) return;
+  try {
+    const dir = path.join(root, "logs");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "update-error.txt"), message, "utf8");
+  } catch {
+    // เขียนไม่ได้ก็ยังมีสถานะ failed บอกอยู่
+  }
+}
 
 export function readUpdateStage(): UpdateStage | null {
   const root = getInstallRoot();
@@ -74,8 +103,12 @@ export function clearUpdateStage(): void {
   const root = getInstallRoot();
   if (!root) return;
   try {
-    const p = path.join(root, "logs", "update-status.txt");
-    if (fs.existsSync(p)) fs.unlinkSync(p);
+    // ต้องลบข้อความผิดพลาดของรอบก่อนด้วย ไม่งั้นถ้ารอบใหม่ล้มเหลวคนละสาเหตุ
+    // หน้าเว็บจะเอาเหตุผลเก่ามาแสดง แล้วผู้ใช้จะแก้ผิดจุด
+    for (const name of ["update-status.txt", "update-error.txt"]) {
+      const p = path.join(root, "logs", name);
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    }
   } catch {
     // ลบไม่ได้ก็ไม่เป็นไร ไฟล์จะถูกเขียนทับตอนอัปเดตรอบหน้าอยู่แล้ว
   }
@@ -132,93 +165,66 @@ export async function fetchLatestVersion(): Promise<string> {
 }
 
 /**
- * สคริปต์ที่ทำการอัปเดตจริง เขียนเป็น ASCII ล้วนโดยตั้งใจ
+ * ดาวน์โหลดและแตกไฟล์เวอร์ชันใหม่ด้วย Node ทั้งหมด
  *
- * Windows PowerShell 5.1 อ่านไฟล์ .ps1 ที่ไม่มี BOM เป็นรหัส ANSI ถ้าใส่ภาษาไทย
- * ลงไปแล้วเขียนไฟล์จาก Node (ซึ่งไม่ใส่ BOM ให้) ข้อความจะเพี้ยนทั้งไฟล์
- * ข้อความในนี้จึงเป็นอังกฤษล้วน และมีแต่ตัวเราที่อ่าน (เก็บลง logs\update.log)
+ * ทำงานเป็นเบื้องหลัง ไม่ให้ผู้ใช้ค้างรอ และรายงานความคืบหน้าผ่านไฟล์สถานะ
+ * ที่หน้าเว็บถามเป็นระยะ ทุกความผิดพลาดถูกจับมาเขียนเป็นข้อความให้ผู้ใช้อ่านได้
  *
- * ลำดับการทำงานออกแบบให้ย้อนกลับได้ถ้าพัง: ดาวน์โหลดให้สำเร็จก่อน แล้วค่อยหยุด
- * โปรแกรม สำรองของเดิมทั้งก้อน ถ้าแตกไฟล์ใหม่ไม่สำเร็จจะเอาของเดิมกลับมาแล้วเปิดต่อ
+ * แตกไฟล์ลง app.new ไม่ใช่ทับ app ตรงๆ เพราะไฟล์ของโปรแกรมที่กำลังทำงานอยู่
+ * ถูกล็อกโดย Windows ทับไม่ได้ การสลับจริงเกิดตอนเปิดโปรแกรมครั้งถัดไป ซึ่ง
+ * start.cmd เป็นคนทำให้ (ดู install/ndp-kit-setup.ps1)
  */
-export function buildUpdateScript(assetUrl: string): string {
-  return `# NDP Kit self-update helper. Generated automatically - do not edit.
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
+export async function stageUpdate(): Promise<void> {
+  const root = getInstallRoot();
+  if (!root) throw new Error("เครื่องนี้ไม่ได้ติดตั้งผ่านตัวช่วยติดตั้ง");
 
-$root    = $PSScriptRoot
-$app     = Join-Path $root 'app'
-$backup  = Join-Path $root 'app.backup'
-$zip     = Join-Path $env:TEMP 'ndp-kit-update.zip'
-$dataTmp = Join-Path $env:TEMP 'ndp-kit-data-keep'
-$logDir  = Join-Path $root 'logs'
-$log     = Join-Path $logDir 'update.log'
-$status  = Join-Path $logDir 'update-status.txt'
+  const zipPath = path.join(root, "update.zip");
+  const stageDir = path.join(root, "app.new");
 
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
-function Log($m) { "\$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  \$m" | Add-Content $log }
-
-# The web page polls this single-word file to show which step is running.
-# Written before each step so the UI never reports a step as finished early.
-function Status($s) { Set-Content $status $s -Encoding Ascii -NoNewline }
-
-Log 'update started'
-Status 'downloading'
-try {
-  Log 'downloading package'
-  Invoke-WebRequest '${assetUrl}' -OutFile $zip -UseBasicParsing -TimeoutSec 600
-  Log 'download finished'
-
-  # Stop the running app only after the download succeeded, so a network
-  # failure never leaves the site down.
-  Status 'stopping'
-  Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
-    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } |
-    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-  Start-Sleep -Seconds 3
-  Log 'app stopped'
-
-  if (Test-Path $dataTmp) { Remove-Item $dataTmp -Recurse -Force }
-  $dataDir = Join-Path $app 'data'
-  if (Test-Path $dataDir) { Copy-Item $dataDir $dataTmp -Recurse -Force; Log 'settings saved' }
-
-  if (Test-Path $backup) { Remove-Item $backup -Recurse -Force }
-  Move-Item $app $backup
-  Log 'old version moved aside'
-
-  Status 'extracting'
   try {
-    Expand-Archive -Path $zip -DestinationPath $app -Force
-    Log 'new version extracted'
-  } catch {
-    Status 'failed'
-    Log "extract failed: \$(\$_.Exception.Message) - rolling back"
-    if (Test-Path $app) { Remove-Item $app -Recurse -Force }
-    Move-Item $backup $app
-    Start-Process 'wscript.exe' -ArgumentList "\`"\$(Join-Path \$root 'start.vbs')\`"" -WindowStyle Hidden
-    Log 'rolled back and restarted'
-    exit 1
-  }
+    writeUpdateStage("downloading");
 
-  Status 'restoring'
-  if (Test-Path $dataTmp) {
-    Copy-Item $dataTmp (Join-Path $app 'data') -Recurse -Force
-    Remove-Item $dataTmp -Recurse -Force
-    Log 'settings restored'
-  }
-  Remove-Item $backup -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item $zip -Force -ErrorAction SilentlyContinue
+    const res = await fetch(ASSET_URL, {
+      headers: { "User-Agent": "ndp-kit-updater", "Cache-Control": "no-cache" },
+      signal: AbortSignal.timeout(600000),
+    });
+    if (!res.ok) throw new Error(`ดาวน์โหลดไม่สำเร็จ ปลายทางตอบกลับรหัส ${res.status}`);
 
-  Status 'restarting'
-  Start-Process 'wscript.exe' -ArgumentList "\`"\$(Join-Path \$root 'start.vbs')\`"" -WindowStyle Hidden
-  Log 'app restarted - update complete'
-  Status 'done'
-} catch {
-  Log "update failed: \$(\$_.Exception.Message)"
-  Status 'failed'
-  # Last resort: make sure something is running again.
-  Start-Process 'wscript.exe' -ArgumentList "\`"\$(Join-Path \$root 'start.vbs')\`"" -WindowStyle Hidden -ErrorAction SilentlyContinue
-  exit 1
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length < 100000) {
+      // ไฟล์จริงมีขนาดหลายเมกะไบต์ ถ้าได้มานิดเดียวแปลว่าโดน proxy ส่งหน้า error
+      // หรือหน้า login ของระบบกรองเว็บกลับมาแทนไฟล์จริง
+      throw new Error("ไฟล์ที่ได้มาเล็กผิดปกติ อาจถูกระบบกรองเว็บของหน่วยงานขวางไว้");
+    }
+    fs.writeFileSync(zipPath, buf);
+
+    writeUpdateStage("extracting");
+    fs.rmSync(stageDir, { recursive: true, force: true });
+
+    new AdmZip(zipPath).extractAllTo(stageDir, true);
+
+    if (!fs.existsSync(path.join(stageDir, "server.js"))) {
+      throw new Error("ไฟล์ที่ดาวน์โหลดมาไม่สมบูรณ์ (ไม่พบ server.js)");
+    }
+
+    fs.rmSync(zipPath, { force: true });
+    writeUpdateStage("staged");
+  } catch (error: any) {
+    fs.rmSync(stageDir, { recursive: true, force: true });
+    fs.rmSync(zipPath, { force: true });
+    writeUpdateError(String(error?.message || error));
+    writeUpdateStage("failed");
+    throw error;
+  }
 }
-`;
+
+/** มีเวอร์ชันใหม่รออยู่ พร้อมสลับตอนเปิดโปรแกรมครั้งถัดไปหรือยัง */
+export function hasStagedUpdate(): boolean {
+  const root = getInstallRoot();
+  if (!root) return false;
+  try {
+    return fs.existsSync(path.join(root, "app.new", "server.js"));
+  } catch {
+    return false;
+  }
 }

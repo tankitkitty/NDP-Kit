@@ -25,7 +25,8 @@ export default function UpdateBanner() {
   const [stepIndex, setStepIndex] = useState(-1);
   const [elapsed, setElapsed] = useState(0);
   const [failed, setFailed] = useState(false);
-  const [blocked, setBlocked] = useState(false);
+  const [stagedOnly, setStagedOnly] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const [startError, setStartError] = useState("");
   const startedAt = useRef(0);
 
@@ -68,7 +69,8 @@ export default function UpdateBanner() {
     startedAt.current = Date.now();
     setStepIndex(0);
     setFailed(false);
-    setBlocked(false);
+    setStagedOnly(false);
+    setErrorMsg("");
     setStartError("");
 
     // ต้องตรวจผลของคำสั่งเริ่มอัปเดตด้วย ถ้าเซิร์ฟเวอร์เริ่มให้ไม่ได้ (เช่นเขียนไฟล์
@@ -96,6 +98,7 @@ export default function UpdateBanner() {
 
         if (data.stage === "failed") {
           setFailed(true);
+          setErrorMsg(data.error || "");
           clearInterval(poll);
           return;
         }
@@ -106,17 +109,24 @@ export default function UpdateBanner() {
           return;
         }
 
-        // ยังค้างที่ "สั่งไปแล้ว" แปลว่าสคริปต์ไม่เคยเริ่มทำงานเลย ไม่ใช่ดาวน์โหลดช้า
-        // 30 วินาทีเผื่อเครื่องช้ามากแล้ว ถ้าเกินนี้ถือว่าไม่ได้เริ่มจริง
-        if (data.stage === "starting" && Date.now() - startedAt.current > 30000) {
-          setBlocked(true);
+        // ไฟล์ใหม่พร้อมแล้วแต่ยังไม่ถูกสลับ แปลว่าเปิดโปรแกรมใหม่อัตโนมัติไม่สำเร็จ
+        //
+        // ต้องนับ restarting ด้วย เพราะถ้าโปรแกรมสั่งเปิดตัวใหม่แล้วปิดตัวเองสำเร็จจริง
+        // เซิร์ฟเวอร์จะตอบไม่ได้ เราจะไม่มีทางอ่านสถานะนี้เจอตั้งแต่แรก การที่ยังอ่านเจอ
+        // แปลว่าตัวเก่ายังอยู่ = ไม่มีอะไรเกิดขึ้นจริง
+        //
+        // ไม่ใช่ความล้มเหลว เพราะการสลับจะเกิดเองตอนเปิดโปรแกรมครั้งถัดไป
+        // แค่ต้องบอกผู้ใช้ว่าต้องทำอะไรต่อ ไม่ปล่อยให้รอเก้อ
+        if (
+          (data.stage === "staged" || data.stage === "restarting") &&
+          Date.now() - startedAt.current > 45000
+        ) {
+          setStagedOnly(true);
           clearInterval(poll);
           return;
         }
 
-        if (data.stage && data.stage !== "starting" && data.stage !== "downloading") {
-          setStepIndex(1);
-        }
+        if (data.stage && data.stage !== "downloading") setStepIndex(1);
       } catch {
         // เซิร์ฟเวอร์ปิดอยู่ = กำลังสลับไฟล์ ยังไม่ถือว่าล้มเหลว
         setStepIndex((s) => (s < 1 ? 1 : s));
@@ -177,23 +187,23 @@ export default function UpdateBanner() {
               style={{
                 width: `${percent}%`,
                 height: "100%",
-                background: failed || blocked ? "#b42318" : "var(--button)",
+                background: failed ? "#b42318" : stagedOnly ? "#b54708" : "var(--button)",
                 transition: "width 0.4s ease",
               }}
             />
           </div>
 
-          {blocked ? (
-            <p style={{ marginTop: 0, color: "#b42318" }}>
-              ตัวอัปเดตไม่เริ่มทำงาน โปรแกรมสั่งเปิดให้แล้วแต่ไม่มีอะไรเกิดขึ้น
-              มักเกิดจากโปรแกรมป้องกันไวรัสสกัดการเปิด PowerShell แบบเบื้องหลังไว้ —
-              <strong> ให้อัปเดตผ่านตัวช่วยติดตั้งแทน โดยรัน ndp-kit-setup.bat แล้วเลือกเมนู 1</strong>{" "}
-              (ปลอดภัย ไฟล์และค่าตั้งค่าเดิมยังอยู่ครบ ไม่มีอะไรถูกเปลี่ยนจากการกดปุ่มนี้)
+          {stagedOnly ? (
+            <p style={{ marginTop: 0, color: "#b54708" }}>
+              ดาวน์โหลดเวอร์ชันใหม่เรียบร้อยแล้ว แต่เปิดโปรแกรมใหม่อัตโนมัติไม่สำเร็จ —
+              <strong> ให้ปิดโปรแกรมแล้วเปิดใหม่จากไอคอนบนหน้าจอ ระบบจะเปลี่ยนเป็นเวอร์ชันใหม่ให้เอง</strong>{" "}
+              (ไฟล์ใหม่เตรียมไว้ครบแล้ว ค่าตั้งค่าทั้งหมดยังอยู่ ถ้าเครื่องถูกปิดไปก่อนก็ได้เหมือนกัน)
             </p>
           ) : failed ? (
             <p style={{ marginTop: 0, color: "#b42318" }}>
-              อัปเดตไม่สำเร็จ ระบบย้อนกลับเป็นเวอร์ชันเดิมและเปิดโปรแกรมให้แล้ว
-              รายละเอียดดูได้ที่ <code>C:\NDP-Kit\logs\update.log</code> หรือเมนู 3 ของตัวช่วยติดตั้ง
+              อัปเดตไม่สำเร็จ {errorMsg ? <strong>{errorMsg}</strong> : null} โปรแกรมยังเป็นเวอร์ชันเดิม
+              และใช้งานได้ตามปกติ ไม่มีอะไรเสียหาย ลองใหม่อีกครั้งได้
+              ถ้ายังไม่ได้ให้อัปเดตผ่านตัวช่วยติดตั้งแทน โดยรัน ndp-kit-setup.bat แล้วเลือกเมนู 1
             </p>
           ) : (
             <>
