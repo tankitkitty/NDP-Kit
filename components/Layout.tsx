@@ -3,6 +3,16 @@ import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import Logo from "./Logo";
+import {
+  ChecklistIcon,
+  DatabaseIcon,
+  FeeScheduleIcon,
+  HomeIcon,
+  ImportIcon,
+  IconProps,
+  LogoutIcon,
+  PrecheckIcon,
+} from "./NavIcons";
 
 /**
  * เลขเวอร์ชันถูกฝังตอน build โดย .github/workflows/release.yml (ค่าจาก git tag)
@@ -16,18 +26,19 @@ const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "";
 interface NavItem {
   href: string;
   label: string;
+  Icon: (props: IconProps) => JSX.Element;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "หน้าแรก" },
-  { href: "/import-43file", label: "นำเข้า 43 แฟ้ม" },
-  { href: "/eclaim-fee-schedule", label: "eClaim Fee Schedule" },
+  { href: "/", label: "หน้าแรก", Icon: HomeIcon },
+  { href: "/import-43file", label: "นำเข้า 43 แฟ้ม", Icon: ImportIcon },
+  { href: "/eclaim-fee-schedule", label: "eClaim Fee Schedule", Icon: FeeScheduleIcon },
   // ปิดเมนูตรวจสอบสิทธิไว้ก่อน ตัวหน้าและ API ยังอยู่ครบ เข้าถึงได้ทาง URL ตรงๆ
-  // ถ้าจะเปิดใช้อีกครั้ง เอาบรรทัดล่างนี้กลับมา
-  // { href: "/eligibility-check", label: "ตรวจสอบสิทธิ" },
-  { href: "/ndp-precheck", label: "ตรวจก่อนส่งเคลม NDP" },
-  { href: "/setup-checklist", label: "Checklist ตั้งค่า" },
-  { href: "/settings", label: "ตั้งค่าการเชื่อมต่อ" },
+  // ถ้าจะเปิดใช้อีกครั้ง เอาบรรทัดล่างนี้กลับมา (EligibilityIcon มีอยู่แล้วใน NavIcons)
+  // { href: "/eligibility-check", label: "ตรวจสอบสิทธิ", Icon: EligibilityIcon },
+  { href: "/ndp-precheck", label: "ตรวจก่อนส่งเคลม NDP", Icon: PrecheckIcon },
+  { href: "/setup-checklist", label: "Checklist ตั้งค่า", Icon: ChecklistIcon },
+  { href: "/settings", label: "ตั้งค่าการเชื่อมต่อ", Icon: DatabaseIcon },
 ];
 
 interface LayoutProps {
@@ -71,9 +82,10 @@ export default function Layout({ title, loginname, hospitalName, fullWidth, chil
         </div>
         {loginname ? (
           <nav className="sidebar-nav">
-            {NAV_ITEMS.map((item) => (
-              <Link key={item.href} href={item.href} className={isActive(item.href) ? "active" : ""}>
-                {item.label}
+            {NAV_ITEMS.map(({ href, label, Icon }) => (
+              <Link key={href} href={href} className={isActive(href) ? "active" : ""}>
+                <Icon />
+                <span>{label}</span>
               </Link>
             ))}
           </nav>
@@ -87,6 +99,7 @@ export default function Layout({ title, loginname, hospitalName, fullWidth, chil
                 {loginname}
               </span>
               <button className="button-ghost" onClick={handleLogout}>
+                <LogoutIcon size={16} />
                 ออกจากระบบ
               </button>
             </>
