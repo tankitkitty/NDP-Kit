@@ -65,7 +65,8 @@ export default function Settings({
     port: 3306,
     user: "root",
     password: "",
-    database: "nextjs_app",
+    // ค่าตั้งต้นให้ตรงกับชื่อฐานข้อมูลที่หน่วยบริการส่วนใหญ่ใช้จริง จะได้ไม่ต้องพิมพ์เอง
+    database: "pcu",
   });
   const [config43, setConfig43] = useState<Config>({
     host: "localhost",
