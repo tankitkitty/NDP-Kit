@@ -654,6 +654,22 @@ a.version-check-new:hover {
   font-weight: 500;
 }
 
+/* แถวที่น่าสงสัยแต่ยังไม่ฟันธงว่าผิด (ดู ROW_WARN_KEY) ใช้สีเหลืองให้ต่างจากสีแดง
+   ชัดเจน ผู้ใช้จะได้แยกออกว่าอันไหนต้องแก้แน่ๆ อันไหนแค่ต้องไปตรวจทานอีกที */
+.data-table tbody tr.row-warn,
+.data-table tbody tr.row-warn:nth-child(2n) {
+  background: #fffbeb;
+}
+
+.data-table tbody tr.row-warn:hover {
+  background: #fef3c7;
+}
+
+.data-table tbody tr.row-warn td {
+  color: #92400e;
+  font-weight: 500;
+}
+
 .data-table tbody tr:last-child td {
   border-bottom: none;
 }

@@ -1,6 +1,13 @@
 import { selectOnly } from "../readonly";
 import { tableColumns, pickCol } from "../schema";
-import { CheckDefinition, CheckOutcome, OK_MARK, ROW_ALERT_KEY, unavailableOutcome } from "../types";
+import {
+  CheckDefinition,
+  CheckOutcome,
+  OK_MARK,
+  ROW_ALERT_KEY,
+  ROW_WARN_KEY,
+  unavailableOutcome,
+} from "../types";
 
 const ID = "spclty-nhso-code";
 const LIMIT = 500;
@@ -35,10 +42,54 @@ const VALID_CODES: { code: string; meaning: string }[] = [
 
 const MEANING_OF = new Map(VALID_CODES.map((v) => [v.code, v.meaning]));
 
+/**
+ * คำในชื่อแผนกที่บอกใบ้ว่าแผนกนั้นควรผูกกับรหัสไหน
+ *
+ * รหัสที่อยู่ในรายการ 01-12 แต่ map ผิดความหมาย (เช่น แผนก "ศัลยกรรม" ผูกรหัส 01
+ * อายุรกรรม) ระบบตรวจให้ไม่ได้ด้วยตัวรหัสเอง เพราะรหัสถูกต้องตามรูปแบบทุกอย่าง
+ * จึงต้องเดาจากชื่อแผนกแทน แล้วเตือนเป็นสีเหลืองให้คนไปตรวจทาน ไม่ฟันธงว่าผิด
+ *
+ * เก็บรหัสเป็น array เพราะชื่อเดียวเข้าได้หลายรหัสโดยไม่ผิด เช่น "สูตินรีเวช"
+ * เข้าได้ทั้ง 03 และ 04 หรือ "ศัลยกรรมกระดูก" เข้าได้ทั้ง 02 และ 08 — ถ้าชื่อ
+ * เข้าเงื่อนไขหลายกลุ่ม จะรวมรหัสที่ยอมรับได้ทั้งหมดแล้วเตือนเฉพาะตอนที่รหัสจริง
+ * ไม่อยู่ในกลุ่มนั้นเลย
+ *
+ * คำที่กำกวมหรือเป็นคำสั้นที่ไปโผล่ในชื่ออื่นได้ (เช่น "ตา", "เด็ก") ตั้งใจไม่ใส่
+ * เพราะเตือนผิดบ่อยๆ แล้วผู้ใช้จะเลิกสนใจสีเหลืองไปทั้งหมด
+ */
+const NAME_HINTS: { code: string; keywords: string[] }[] = [
+  { code: "01", keywords: ["อายุรกรรม", "อายุรศาสตร์"] },
+  { code: "02", keywords: ["ศัลยกรรม", "ศัลยศาสตร์", "ผ่าตัด"] },
+  { code: "03", keywords: ["สูติ", "ฝากครรภ์", "คลอด"] },
+  { code: "04", keywords: ["นรีเวช"] },
+  { code: "05", keywords: ["กุมาร", "ทารก"] },
+  { code: "06", keywords: ["โสตศอนาสิก", "โสต ศอ นาสิก", "หูคอจมูก", "หู คอ จมูก"] },
+  { code: "07", keywords: ["จักษุ"] },
+  { code: "08", keywords: ["กระดูก", "ออร์โธ", "ortho"] },
+  { code: "09", keywords: ["จิตเวช", "สุขภาพจิต"] },
+  { code: "10", keywords: ["รังสี", "เอกซเรย์", "เอ็กซเรย์", "x-ray", "xray"] },
+  { code: "11", keywords: ["ทันตกรรม", "ทันตะ", "ทำฟัน"] },
+];
+
+/**
+ * รหัสที่ชื่อแผนกบอกใบ้ว่าน่าจะเป็น — คืน array ว่างแปลว่าเดาไม่ได้ (ไม่เตือน)
+ *
+ * ตัดช่องว่างทิ้งก่อนเทียบ เพราะชื่อแผนกในฐานเขียนเว้นวรรคไม่เหมือนกัน
+ * เช่น "หู คอ จมูก" กับ "หูคอจมูก" ต้องเจอทั้งคู่
+ */
+function hintedCodes(name: string): string[] {
+  const text = name.toLowerCase().replace(/\s+/g, "");
+  return NAME_HINTS.filter((h) =>
+    h.keywords.some((k) => text.includes(k.toLowerCase().replace(/\s+/g, "")))
+  ).map((h) => h.code);
+}
+
 const check: CheckDefinition = {
   id: ID,
   title: "รหัสแผนกของ สปสช. (spclty.nhso_code)",
-  description: "แสดงการ map แผนกทั้งหมดกับรหัส สปสช. และเน้นสีแดงแถวที่รหัสไม่ใช่ 01-12",
+  description:
+    "แสดงการ map แผนกทั้งหมดกับรหัส สปสช. เน้นสีแดงแถวที่รหัสไม่ใช่ 01-12 " +
+    "และสีเหลืองแถวที่ชื่อแผนกดูไม่ตรงกับรหัสที่ผูก",
   async run(): Promise<CheckOutcome> {
     try {
       const cols = await tableColumns("spclty");
@@ -84,13 +135,28 @@ const check: CheckDefinition = {
       const rows = raw.map((r: any) => {
         const code = String(r.nhso_code || "").trim();
         const meaning = MEANING_OF.get(code);
+        const name = String(r.spclty_name || "");
+
+        // เตือนเฉพาะตอนที่รหัสใช้ได้อยู่แล้ว เพราะถ้ารหัสผิดก็เป็นแถวสีแดงไปแล้ว
+        // ไม่ต้องบอกซ้ำว่าชื่อไม่ตรงอีก
+        const hints = meaning ? hintedCodes(name) : [];
+        const mismatch = hints.length > 0 && !hints.includes(code);
+        const suggestion = hints.map((c) => `${c} ${MEANING_OF.get(c)}`).join(" หรือ ");
+
         return {
           spclty_code: r.spclty_code,
           spclty_name: r.spclty_name,
           nhso_code: code,
           nhso_meaning: meaning || "",
-          verdict: meaning ? OK_MARK : code ? "รหัสไม่อยู่ในรายการ 01-12" : "ยังไม่ได้กำหนดรหัส",
+          verdict: mismatch
+            ? `ชื่อแผนกไม่ตรงกับรหัส น่าจะเป็น ${suggestion}`
+            : meaning
+              ? OK_MARK
+              : code
+                ? "รหัสไม่อยู่ในรายการ 01-12"
+                : "ยังไม่ได้กำหนดรหัส",
           [ROW_ALERT_KEY]: !meaning,
+          [ROW_WARN_KEY]: mismatch,
         };
       });
 
@@ -98,11 +164,16 @@ const check: CheckDefinition = {
       // ยาวๆ ผู้ใช้อาจไม่เลื่อนไปเจอ
       rows.sort((a: any, b: any) => {
         if (a[ROW_ALERT_KEY] !== b[ROW_ALERT_KEY]) return a[ROW_ALERT_KEY] ? -1 : 1;
+        if (a[ROW_WARN_KEY] !== b[ROW_WARN_KEY]) return a[ROW_WARN_KEY] ? -1 : 1;
         return String(a.spclty_code).localeCompare(String(b.spclty_code));
       });
 
       const total = rows.length;
       const bad = rows.filter((r: any) => r[ROW_ALERT_KEY]).length;
+      const warn = rows.filter((r: any) => r[ROW_WARN_KEY]).length;
+      // ต่อท้ายบรรทัดสรุป เพราะการ์ดที่ยังไม่กดขยายเห็นแค่บรรทัดนี้
+      // ถ้าไม่บอกไว้ แถวสีเหลืองจะไม่มีใครเห็นเลย
+      const warnNote = warn > 0 ? ` และมี ${warn} แผนกที่ชื่อไม่ตรงกับรหัสที่ผูก (แถวสีเหลือง) ควรตรวจทาน` : "";
 
       return {
         id: ID,
@@ -110,8 +181,8 @@ const check: CheckDefinition = {
         problemCount: bad,
         summary:
           bad === 0
-            ? `แผนกทั้งหมด ${total} แผนกผูกรหัส สปสช. ถูกต้องแล้ว`
-            : `พบ ${bad} จาก ${total} แผนกที่รหัส สปสช. ไม่ถูกต้อง (แถวสีแดง)`,
+            ? `แผนกทั้งหมด ${total} แผนกผูกรหัส สปสช. ถูกต้องแล้ว${warnNote}`
+            : `พบ ${bad} จาก ${total} แผนกที่รหัส สปสช. ไม่ถูกต้อง (แถวสีแดง)${warnNote}`,
         sections: [
           {
             title: `การ map แผนกกับรหัส สปสช. (${total} แผนก)`,
@@ -126,9 +197,13 @@ const check: CheckDefinition = {
             note:
               total >= LIMIT
                 ? `แสดง ${LIMIT} รายการแรก`
-                : bad > 0
-                  ? "แถวสีแดงคือแถวที่ต้องแก้"
-                  : undefined,
+                : bad > 0 && warn > 0
+                  ? "แถวสีแดงคือแถวที่ต้องแก้ ส่วนแถวสีเหลืองคือชื่อแผนกดูไม่ตรงกับรหัสที่ผูก ให้ตรวจทานอีกที"
+                  : bad > 0
+                    ? "แถวสีแดงคือแถวที่ต้องแก้"
+                    : warn > 0
+                      ? "แถวสีเหลืองคือชื่อแผนกดูไม่ตรงกับรหัสที่ผูก ให้ตรวจทานอีกที (ระบบเดาจากชื่อ อาจไม่ถูกเสมอไป)"
+                      : undefined,
           },
           {
             title: "รหัสที่ใช้ได้ (ใช้ได้เฉพาะ 12 รหัสนี้เท่านั้น)",
@@ -144,8 +219,10 @@ const check: CheckDefinition = {
           "แผนกที่ยังไม่ได้ผูกรหัสหรือผูกรหัสนอกรายการจะทำให้ข้อมูลของแผนกนั้นไม่ผ่านการตรวจ — " +
           "แก้ได้ที่ HOSxP เมนูตั้งค่า > ข้อมูลพื้นฐาน > แผนก โดยเลือกรหัส สปสช. ให้ตรงกับลักษณะงานของแผนก " +
           "แผนกที่ไม่เข้าพวกไหนเลยให้ใช้ 12 (อื่น ๆ) หรือใช้ SQL ด้านล่างแก้ทีละแผนก " +
-          "นอกจากดูแถวสีแดงแล้ว ควรไล่ดูแถวที่เหลือด้วยว่ารหัสที่ผูกไว้ตรงกับลักษณะงานจริงของแผนกหรือไม่ " +
-          "เพราะรหัสที่อยู่ในรายการแต่ map ผิดความหมาย ระบบตรวจให้ไม่ได้",
+          "ส่วนแถวสีเหลืองคือรหัสอยู่ในรายการ 01-12 แล้ว (ไม่ถูก NDP ตีกลับ) แต่ชื่อแผนกดูไม่ตรงกับรหัสที่ผูก " +
+          "เช่น แผนกศัลยกรรมแต่ผูกรหัส 01 อายุรกรรม ทำให้สถิติแยกตามแผนกเพี้ยน — " +
+          "ระบบเดาจากชื่อแผนกเท่านั้น ถ้าตรวจแล้วผูกถูกตามลักษณะงานจริงก็ปล่อยไว้ได้ " +
+          "และควรไล่ดูแถวที่เหลือด้วย เพราะแผนกที่ชื่อไม่มีคำบอกใบ้ ระบบเดาให้ไม่ได้",
         fixSql:
           `-- รหัสที่ใช้ได้: ${VALID_CODES.map((v) => `${v.code}=${v.meaning}`).join(", ")}\n` +
           `UPDATE spclty SET ${nhsoCol} = '01' WHERE ${codeCol || "spclty"} = 'ระบุรหัสแผนก';`,

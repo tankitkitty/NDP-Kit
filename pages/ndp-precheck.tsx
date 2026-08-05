@@ -217,11 +217,12 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
                 </tr>
               </thead>
               <tbody>
-                {/* _alert เป็นคีย์พิเศษที่ฝั่ง check ใส่มาเพื่อขอให้เน้นแถวเป็นสีแดง
-                    (ดู ROW_ALERT_KEY ใน lib/precheck/types.ts) ไม่ใช่คอลัมน์จริง
-                    จึงไม่ถูกวาดเป็นช่องในตาราง */}
+                {/* _alert / _warn เป็นคีย์พิเศษที่ฝั่ง check ใส่มาเพื่อขอให้เน้นแถวเป็นสีแดง
+                    (ผิดแน่ๆ) หรือสีเหลือง (น่าสงสัย ควรตรวจทาน) — ดู ROW_ALERT_KEY กับ
+                    ROW_WARN_KEY ใน lib/precheck/types.ts — ไม่ใช่คอลัมน์จริง จึงไม่ถูก
+                    วาดเป็นช่องในตาราง */}
                 {section.rows.map((row, i) => (
-                  <tr key={i} className={row._alert ? "row-alert" : undefined}>
+                  <tr key={i} className={row._alert ? "row-alert" : row._warn ? "row-warn" : undefined}>
                     {section.columns.map((c) => (
                       <td key={c.key} className="wrap">
                         {row[c.key] === null || row[c.key] === undefined || row[c.key] === "" ? (
