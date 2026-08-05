@@ -51,6 +51,7 @@ const QUERY_CARDS: CardMeta[] = [
   { id: "triferdine", title: "บริการจ่ายยา Triferdine (ICD-10 Z392 + ADP 30016)", description: "เคสจ่ายยา Triferdine ต้องมีครบทั้ง ICD-10 Z392, ค่าบริการรหัส ADP 30016 และรายการยารหัส 737390 หรือ 689609", needsRange: true },
   { id: "pregnancy-test", title: "บริการชุดทดสอบการตั้งครรภ์ (ICD-10 Z32 + ADP 30014/30017/31101)", description: "เคสชุดทดสอบการตั้งครรภ์ต้องมีทั้ง ICD-10 Z320 หรือ Z321 และค่าบริการรหัส ADP 30014 / 30017 หรือ CSMBS 31101", needsRange: true },
   { id: "contraceptive", title: "บริการยาเม็ดและยาฉีดคุมกำเนิด (ICD-10 Z304 + รหัส TMT)", description: "เคสคุมกำเนิดต้องมีทั้ง ICD-10 Z304 และรายการยาที่ตั้งรหัส TMT ตรงตามที่ สปสช. กำหนด (23 รหัส)", needsRange: true },
+  { id: "condom", title: "บริการถุงยางพร้อมให้คำปรึกษา (ICD-10 Z30 + bill code)", description: "เคสถุงยางพร้อมให้คำปรึกษาต้องมีทั้ง ICD-10 Z30/Z300/Z304/Z309 และรายการค่าบริการ bill code 6201001/6201005/6201006/6201007", needsRange: true },
 ];
 
 /** id สมมติของการ์ดข้อ 8 ซึ่งเป็น checklist ติ๊กเอง ไม่ได้ query (ใช้จัดลำดับในแท็บ) */
@@ -74,7 +75,7 @@ const TABS: { key: string; label: string; hint: string; ids: string[] }[] = [
     key: "service",
     label: "ตรวจข้อมูลการบริการ",
     hint: "ตรวจข้อมูลที่คีย์จริงในช่วงวันที่ที่เลือก ก่อนส่งเคลมแต่ละรอบ",
-    ids: ["auth-code", "postnatal-care", "triferdine", "pregnancy-test", "contraceptive", "claim-log"],
+    ids: ["auth-code", "postnatal-care", "triferdine", "pregnancy-test", "contraceptive", "condom", "claim-log"],
   },
   {
     key: "master",

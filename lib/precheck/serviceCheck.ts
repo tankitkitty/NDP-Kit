@@ -37,8 +37,16 @@ export interface ServiceCheckConfig {
    */
   adpCodes?: string[];
   /**
+   * รหัส bill code (nondrugitems/drugitems.billcode) ที่ใช้ระบุรายการค่าบริการแทน
+   * รหัส ADP — บางบริการ สปสช. กำหนดมาเป็น bill code ไม่ใช่ ADP
+   *
+   * นับรวมกับ adpCodes เป็นเงื่อนไขเดียวกันคือ "เคสนี้มีรายการค่าบริการหรือยัง"
+   * เจอรหัสไหนรหัสหนึ่งจากทั้งสองชุดก็ถือว่ามีแล้ว
+   */
+  billCodes?: string[];
+  /**
    * ข้อความแทนรายการรหัสในหน้าจอ ใส่เมื่อรหัสไม่ได้มาจากชุดเดียวกันทั้งหมด
-   * เช่น "ADP 30014 / 30017 หรือ CSMBS 31101" — ไม่ใส่จะขึ้นว่า "ADP <รหัส>" ตามปกติ
+   * เช่น "ADP 30014 / 30017 หรือ CSMBS 31101" — ไม่ใส่จะประกอบจากรหัสที่ให้มาเอง
    */
   adpLabel?: string;
   /**
@@ -67,9 +75,10 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
   const icdList = expandIcd(cfg.icdCodes);
   const icdLabel = cfg.icdCodes.join(" / ");
   const adpCodes = cfg.adpCodes || [];
+  const billCodes = cfg.billCodes || [];
   const drugCodes = cfg.drugCodes || [];
-  // บริการบางอย่างดูจากรายการยาอย่างเดียว ไม่มีรหัสค่าบริการ ADP ให้ตรวจ
-  const needAdp = adpCodes.length > 0;
+  // บริการบางอย่างดูจากรายการยาอย่างเดียว ไม่มีรหัสค่าบริการให้ตรวจ
+  const needAdp = adpCodes.length + billCodes.length > 0;
   const needDrug = drugCodes.length > 0;
 
   const drugLabel = cfg.drugLabel || (cfg.drugName ? `ยา ${cfg.drugName}` : "รายการยา");
@@ -77,7 +86,14 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
   // รายการรหัสยาว 20 กว่ารหัสใส่ในหัวตาราง/ช่องผลตรวจไม่ไหว ย่อเหลือจำนวนรหัส
   // ส่วนรายการเต็มไปอยู่ในคำแนะนำการแก้ไขซึ่งมีที่ให้อ่านพอ
   const drugCodeShort = drugCodes.length > 3 ? `${drugCodes.length} รหัส` : drugCodes.join(" หรือ ");
-  const adpLabel = cfg.adpLabel || `ADP ${adpCodes.join(" หรือ ")}`;
+  const adpLabel =
+    cfg.adpLabel ||
+    [
+      adpCodes.length ? `ADP ${adpCodes.join(" หรือ ")}` : "",
+      billCodes.length ? `bill code ${billCodes.join(" หรือ ")}` : "",
+    ]
+      .filter(Boolean)
+      .join(" หรือ ");
 
   return {
     id: cfg.id,
@@ -91,7 +107,7 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
     async run(ctx: CheckContext): Promise<CheckOutcome> {
       try {
         // icode ของแต่ละหน่วยบริการไม่เหมือนกัน จึงต้องถามจากฐานเอง ห้าม hard-code
-        const adpItems = needAdp ? await findByAdpCode(adpCodes) : [];
+        const adpItems = needAdp ? await findServiceItems(adpCodes, billCodes) : [];
         const drugItems = needDrug ? await findByDrugCode(drugCodes) : [];
         const adpIcodes = adpItems.map((i) => i.icode);
         const drugIcodes = drugItems.map((i) => i.icode);
@@ -333,24 +349,43 @@ function ph(n: number): string {
  * ปกติค่าบริการอยู่ใน nondrugitems แต่บางหน่วยตั้งไว้ใน drugitems จึงดูทั้งสองตาราง
  * และเช็คก่อนว่ามีคอลัมน์ nhso_adp_code จริง เพราะ HOSxP รุ่นเก่าบางรุ่นยังไม่มี
  */
-async function findByAdpCode(adpCodes: string[]): Promise<ItemRow[]> {
+async function findServiceItems(adpCodes: string[], billCodes: string[]): Promise<ItemRow[]> {
   const out: ItemRow[] = [];
   for (const table of ["nondrugitems", "drugitems"]) {
     const cols = await tableColumns(table);
-    const adpCol = pickCol(cols, ["nhso_adp_code"]);
-    if (!adpCol) continue;
+    const adpCol = adpCodes.length ? pickCol(cols, ["nhso_adp_code"]) : null;
+    const billCol = billCodes.length ? pickCol(cols, ["billcode"]) : null;
+    if (!adpCol && !billCol) continue;
+
+    // เทียบแบบตัดช่องว่างทิ้งทั้งสองฝั่ง เพราะบางหน่วยพิมพ์รหัสติดช่องว่างมาด้วย
+    const conds: string[] = [];
+    const params: unknown[] = [];
+    if (adpCol) {
+      conds.push(`REPLACE(COALESCE(${adpCol}, ''), ' ', '') IN (${ph(adpCodes.length)})`);
+      params.push(...adpCodes);
+    }
+    if (billCol) {
+      conds.push(`REPLACE(COALESCE(${billCol}, ''), ' ', '') IN (${ph(billCodes.length)})`);
+      params.push(...billCodes);
+    }
+
     const rows: any = await selectOnly(
-      `SELECT icode, name, REPLACE(COALESCE(${adpCol}, ''), ' ', '') AS adp_code
+      `SELECT icode, name
+              ${adpCol ? `, REPLACE(COALESCE(${adpCol}, ''), ' ', '') AS adp_code` : ""}
+              ${billCol ? `, REPLACE(COALESCE(${billCol}, ''), ' ', '') AS bill_code` : ""}
          FROM ${table}
-        WHERE REPLACE(COALESCE(${adpCol}, ''), ' ', '') IN (${ph(adpCodes.length)})
+        WHERE ${conds.join(" OR ")}
         LIMIT 50`,
-      adpCodes
+      params
     );
+
     for (const r of rows) {
+      // บอกด้วยว่าเจอด้วยรหัสฝั่งไหน เพราะรายการเดียวกันอาจตั้งไว้คนละช่อง
+      const byAdp = adpCol && adpCodes.includes(String(r.adp_code));
       out.push({
         icode: String(r.icode),
         name: String(r.name || ""),
-        code: String(r.adp_code || ""),
+        code: byAdp ? String(r.adp_code) : `${r.bill_code} (bill code)`,
         source: table,
       });
     }

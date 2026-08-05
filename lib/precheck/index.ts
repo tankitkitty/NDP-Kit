@@ -13,6 +13,7 @@ import postnatalCare from "./checks/postnatalCare";
 import triferdine from "./checks/triferdine";
 import pregnancyTest from "./checks/pregnancyTest";
 import contraceptive from "./checks/contraceptive";
+import condom from "./checks/condom";
 
 /** ทะเบียนการ์ดตรวจสอบทั้งหมด (ลำดับ = ลำดับที่แสดงบน dashboard) */
 export const CHECKS: CheckDefinition[] = [
@@ -32,6 +33,7 @@ export const CHECKS: CheckDefinition[] = [
   triferdine,
   pregnancyTest,
   contraceptive,
+  condom,
 ];
 
 export function getCheck(id: string): CheckDefinition | undefined {
