@@ -24,7 +24,9 @@ interface Import43Result {
 
 export default function Import43File({ loginname, hospitalName }: { loginname: string; hospitalName: string }) {
   const [creatingTables43, setCreatingTables43] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  // เก็บว่าข้อความนี้เป็นความสำเร็จหรือข้อผิดพลาดด้วย ไม่ใช่แค่ตัวข้อความ
+  // เพื่อให้กล่องแจ้งผลติดสีตามกติกาสีของโปรเจ็ค (เขียว = สำเร็จ, แดง = ผิดพลาด)
+  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [uploading43, setUploading43] = useState(false);
   const [importSummary, setImportSummary] = useState<{
@@ -39,12 +41,12 @@ export default function Import43File({ loginname, hospitalName }: { loginname: s
       const res = await fetch("/api/init-43file", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
-        setMessage(data.message || "สร้างตารางสำเร็จ");
+        setMessage({ text: data.message || "สร้างตารางสำเร็จ", error: false });
       } else {
-        setMessage(data.error || "ไม่สามารถสร้างตารางได้");
+        setMessage({ text: data.error || "ไม่สามารถสร้างตารางได้", error: true });
       }
     } catch (error) {
-      setMessage("เกิดข้อผิดพลาดในการสร้างตาราง");
+      setMessage({ text: "เกิดข้อผิดพลาดในการสร้างตาราง", error: true });
     } finally {
       setCreatingTables43(false);
     }
@@ -52,7 +54,7 @@ export default function Import43File({ loginname, hospitalName }: { loginname: s
 
   async function uploadZip43() {
     if (!zipFile) {
-      setMessage("กรุณาเลือกไฟล์ ZIP ก่อน");
+      setMessage({ text: "กรุณาเลือกไฟล์ ZIP ก่อน", error: true });
       return;
     }
 
@@ -67,13 +69,13 @@ export default function Import43File({ loginname, hospitalName }: { loginname: s
       });
       const data = await res.json();
       if (res.ok) {
-        setMessage(data.message || "นำเข้าข้อมูลสำเร็จ");
+        setMessage({ text: data.message || "นำเข้าข้อมูลสำเร็จ", error: false });
         setImportSummary({ results: data.results || [], skippedFiles: data.skippedFiles || [] });
       } else {
-        setMessage(data.error || "ไม่สามารถนำเข้าข้อมูลได้");
+        setMessage({ text: data.error || "ไม่สามารถนำเข้าข้อมูลได้", error: true });
       }
     } catch (error) {
-      setMessage("เกิดข้อผิดพลาดในการอัพโหลดไฟล์");
+      setMessage({ text: "เกิดข้อผิดพลาดในการอัพโหลดไฟล์", error: true });
     } finally {
       setUploading43(false);
     }
@@ -103,19 +105,27 @@ export default function Import43File({ loginname, hospitalName }: { loginname: s
             {uploading43 ? "กำลังนำเข้าข้อมูล..." : "นำเข้าข้อมูล"}
           </button>
         </div>
-        {message ? <div className="status-message">{message}</div> : null}
+        {message ? (
+          <div className={`status-message ${message.error ? "status-error" : "status-success"}`}>{message.text}</div>
+        ) : null}
         {importSummary ? (
           <div className="status-message">
-            <ul style={{ margin: 0, paddingLeft: 20 }}>
-              {importSummary.results.map((r, i) => (
-                <li key={i}>
-                  {r.file} → {r.table}: {r.rowsImported.toLocaleString()}/{r.rowsParsed.toLocaleString()} แถว
-                  {r.malformedRows > 0 ? ` (ผิดปกติ ${r.malformedRows} แถว)` : ""}
-                  {r.errors.length > 0 ? ` — ข้อผิดพลาด: ${r.errors.join(", ")}` : ""}
-                </li>
-              ))}
+            {/* ติดสีรายไฟล์ตามกติกาสีของโปรเจ็ค: นำเข้าครบไม่มี error = เขียวอ่อน
+                มี error หรือแถวผิดปกติ = แดงอ่อน จะได้เห็นทันทีว่าไฟล์ไหนมีปัญหา
+                โดยไม่ต้องไล่อ่านทุกบรรทัด */}
+            <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 6 }}>
+              {importSummary.results.map((r, i) => {
+                const failed = r.errors.length > 0 || r.malformedRows > 0 || r.rowsImported < r.rowsParsed;
+                return (
+                  <li key={i} className={failed ? "state-alert" : "state-ok"}>
+                    {r.file} → {r.table}: {r.rowsImported.toLocaleString()}/{r.rowsParsed.toLocaleString()} แถว
+                    {r.malformedRows > 0 ? ` (ผิดปกติ ${r.malformedRows} แถว)` : ""}
+                    {r.errors.length > 0 ? ` — ข้อผิดพลาด: ${r.errors.join(", ")}` : ""}
+                  </li>
+                );
+              })}
               {importSummary.skippedFiles.length > 0 ? (
-                <li>ข้ามไฟล์ที่ไม่รู้จัก: {importSummary.skippedFiles.join(", ")}</li>
+                <li className="state-warn">ข้ามไฟล์ที่ไม่รู้จัก: {importSummary.skippedFiles.join(", ")}</li>
               ) : null}
             </ul>
           </div>

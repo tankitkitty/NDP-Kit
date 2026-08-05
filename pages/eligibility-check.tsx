@@ -277,6 +277,13 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
     return <span className="status-pill status-n" title={v.message}>{v.message}</span>;
   }
 
+  /** คลาสสีพื้นแถวตามผลการตรวจสอบสิทธิ (ดูกติกาสีแถวใน styles/globals.css) */
+  function rowStatusClass(row: Visit) {
+    if (row.auth_code) return "row-ok";
+    if (verifyResult[row.vn]?.state === "fail") return "row-alert";
+    return undefined;
+  }
+
   function renderStatus(row: Visit) {
     if (row.auth_code) {
       const title = `รหัสยืนยันสิทธิ: ${row.auth_code}` + (row.pttype_expire ? ` • หมดอายุ ${formatDate(row.pttype_expire)}` : "");
@@ -385,8 +392,10 @@ export default function EligibilityCheck({ loginname, hospitalName }: { loginnam
                   </tr>
                 </thead>
                 <tbody>
+                  {/* สีพื้นแถวตามกติกาของโปรเจ็ค: ตรวจสอบสิทธิผ่านแล้ว = เขียวอ่อน,
+                      เพิ่งกดตรวจแล้วไม่สำเร็จ = แดงอ่อน, ที่ยังไม่ได้ตรวจยังไม่รู้ผล จึงปล่อยเป็นแถวปกติ */}
                   {filteredRows.map((row) => (
-                    <tr key={row.vn}>
+                    <tr key={row.vn} className={rowStatusClass(row)}>
                       <td className="action-col">
                         <input type="checkbox" checked={selected.has(row.vn)} onChange={() => toggleSelect(row.vn)} />
                       </td>

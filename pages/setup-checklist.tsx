@@ -25,60 +25,63 @@ type Step = {
 };
 
 // ลำดับขั้นตอนตามคู่มือเตรียมส่งเคลม 13 แฟ้มเข้า NDP — เรียงจากตั้งค่าพื้นฐานไปจนถึงส่งเคลม
+//
+// เลขข้อในหน้าตรวจก่อนส่งเคลมนับใหม่จาก 1 ในแต่ละแท็บ การอ้างถึงจึงต้องบอกชื่อแท็บด้วย
+// ไม่งั้นเลขซ้ำกันข้ามแท็บจนหาไม่เจอ และลิงก์ส่ง ?tab= ไปเพื่อให้เปิดมาตรงแท็บนั้นเลย
 const STEPS: Step[] = [
   {
     key: "deformed",
     title: "ตั้งค่าเลขบัตรผู้พิการให้ตรงเลขบัตรประชาชน",
     detail:
-      "ตรวจ person_deformed.deformed_no ให้เท่ากับ person.cid (ไม่มีขีด) ทุกราย — ใช้การ์ดข้อ 1 ในหน้าตรวจก่อนส่งเคลม แก้อัตโนมัติได้",
-    link: { href: "/ndp-precheck", label: "ไปหน้าตรวจ (ข้อ 1)" },
+      "ตรวจ person_deformed.deformed_no ให้เท่ากับ person.cid (ไม่มีขีด) ทุกราย — ใช้การ์ดข้อ 1 แท็บข้อมูลตั้งต้นและการตั้งค่า ในหน้าตรวจก่อนส่งเคลม แก้อัตโนมัติได้",
+    link: { href: "/ndp-precheck?tab=master", label: "ไปหน้าตรวจ (ข้อมูลตั้งต้น ข้อ 1)" },
   },
   {
     key: "pocode",
     title: "ตรวจรหัสไปรษณีย์ผู้ป่วยให้ครบ 5 หลัก",
-    detail: "แก้ patient.po_code ที่ไม่ใช่ตัวเลข 5 หลักในหน้าเวชระเบียน — ดูรายชื่อจากการ์ดข้อ 2",
-    link: { href: "/ndp-precheck", label: "ไปหน้าตรวจ (ข้อ 2)" },
+    detail: "แก้ patient.po_code ที่ไม่ใช่ตัวเลข 5 หลักในหน้าเวชระเบียน — ดูรายชื่อจากการ์ดข้อ 2 แท็บข้อมูลตั้งต้นและการตั้งค่า",
+    link: { href: "/ndp-precheck?tab=master", label: "ไปหน้าตรวจ (ข้อมูลตั้งต้น ข้อ 2)" },
   },
   {
     key: "provider",
     title: "กรอกข้อมูลบุคลากรทางการแพทย์ให้ครบ",
     detail:
       "เลขใบประกอบวิชาชีพ, เลขบัตรประชาชน 13 หลัก, ประเภทบุคลากร (provider_type) และรหัสสภาวิชาชีพ (01-07) ของเจ้าหน้าที่ทุกคนที่ยังปฏิบัติงาน รวมทั้งเทียบตาราง doctor_position กับ doctor_position_std ให้ลำดับตรงกัน",
-    link: { href: "/ndp-precheck", label: "ไปหน้าตรวจ (ข้อ 3)" },
+    link: { href: "/ndp-precheck?tab=master", label: "ไปหน้าตรวจ (ข้อมูลตั้งต้น ข้อ 3)" },
   },
   {
     key: "pttype",
     title: "ตั้งค่าสิทธิการรักษา (pttype) สำหรับส่งเบิก",
     detail:
       "สิทธิที่เบิกได้ต้องตั้ง noexpire='Y', export_eclaim='Y', is_pttype_plan='Y', default_request_funds='Y', paidst='02' และ pttype_price_group_id (1=เบิกได้ OFC/LGO, 2=UC/WEL)",
-    link: { href: "/ndp-precheck", label: "ไปหน้าตรวจ (ข้อ 4)" },
+    link: { href: "/ndp-precheck?tab=master", label: "ไปหน้าตรวจ (ข้อมูลตั้งต้น ข้อ 4)" },
   },
   {
     key: "token",
     title: "ตั้งค่า Token สำหรับส่งแฟ้ม",
     detail:
       "ตั้งค่า token ในหน้าจอส่งออกของ HOSxP (เก็บใน sys_var) และให้เจ้าหน้าที่ล็อกอิน NHSO ใน HOSxP เพื่อให้มี token ที่ไม่หมดอายุ",
-    link: { href: "/ndp-precheck", label: "ไปหน้าตรวจ (ข้อ 5)" },
+    link: { href: "/ndp-precheck?tab=master", label: "ไปหน้าตรวจ (ข้อมูลตั้งต้น ข้อ 5)" },
   },
   {
     key: "drug",
     title: "นำเข้า Drug Catalog และปรับรหัส/ราคายา",
     detail:
       "นำเข้า Drug Catalog รอบล่าสุด แล้วปรับ drugitems.sks_drug_code และ unitprice ให้ตรงรายการล่าสุด (ตาม dateeffective) พร้อมตั้งหมวดรายได้ (income) ของยาทุกตัว",
-    link: { href: "/ndp-precheck", label: "ไปหน้าตรวจ (ข้อ 6)" },
+    link: { href: "/ndp-precheck?tab=codes", label: "ไปหน้าตรวจ (รหัสบริการและราคา ข้อ 1)" },
   },
   {
     key: "price",
     title: "ตรวจราคาที่คีย์จริงเทียบราคาตั้งต้น",
     detail: "เลือกช่วงวันที่ที่จะส่งเคลม แล้วตรวจว่า opitemrece.unitprice ตรงกับ drugitems.unitprice",
-    link: { href: "/ndp-precheck", label: "ไปหน้าตรวจ (ข้อ 7)" },
+    link: { href: "/ndp-precheck?tab=codes", label: "ไปหน้าตรวจ (รหัสบริการและราคา ข้อ 2)" },
   },
   {
     key: "services",
     title: "ตั้งรหัสบริการคัดกรองตามที่ NDP กำหนด",
     detail:
-      "HPV, คัดกรองเบาหวาน, Cholesterol+HDL, CBC 13-24 ปี, เคลือบฟลูออไรด์, Fit Test, ไวรัสตับอักเสบ, วัคซีนไข้หวัดใหญ่ (Z251) และวัคซีนอื่นๆ, ยาคุมกำเนิด, ถุงยางอนามัย — ติ๊ก checklist ในการ์ดข้อ 8",
-    link: { href: "/ndp-precheck", label: "ไปหน้าตรวจ (ข้อ 8)" },
+      "HPV, คัดกรองเบาหวาน, Cholesterol+HDL, CBC 13-24 ปี, เคลือบฟลูออไรด์, Fit Test, ไวรัสตับอักเสบ, วัคซีนไข้หวัดใหญ่ (Z251) และวัคซีนอื่นๆ, ยาคุมกำเนิด, ถุงยางอนามัย — ติ๊ก checklist ในการ์ดข้อ 3 แท็บรหัสบริการและราคา",
+    link: { href: "/ndp-precheck?tab=codes", label: "ไปหน้าตรวจ (รหัสบริการและราคา ข้อ 3)" },
   },
   {
     key: "auth",
@@ -96,7 +99,7 @@ const STEPS: Step[] = [
     title: "ส่งเคลม 13 แฟ้มเข้า NDP และติดตามสถานะ",
     detail:
       "ส่งออก 13 แฟ้มจาก HOSxP แล้วติดตามผลจากหน้าเว็บ NDP ของ สปสช. — ถ้าถูกตีกลับ ให้กลับมาไล่ตามการ์ดตรวจสอบอีกครั้ง",
-    link: { href: "/ndp-precheck", label: "ดูประวัติการส่ง (ข้อ 10)" },
+    link: { href: "/ndp-precheck?tab=service", label: "ดูประวัติการส่ง (ตรวจข้อมูลการบริการ ข้อ 5)" },
   },
 ];
 

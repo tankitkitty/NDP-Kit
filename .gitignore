@@ -1,5 +1,7 @@
 node_modules
 .next
+# โฟลเดอร์ build ชั่วคราวตอนตรวจว่าโค้ดผ่าน โดยไม่ไปล้าง cache ของ next dev (ดู next.config.js)
+.next-verify
 out
 tsconfig.tsbuildinfo
 .DS_Store

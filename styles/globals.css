@@ -638,8 +638,12 @@ a.version-check-new:hover {
   background: #f3f6fb;
 }
 
-/* แถวที่ต้องแก้ในตารางที่แสดงข้อมูลทั้งชุด ต้องชนะทั้งลายสลับแถวและ hover
-   ไม่งั้นแถวคู่จะกลบสีแดงจนหาไม่เจอว่าแถวไหนคือแถวที่มีปัญหา */
+/* กติกาสีพื้นแถวของทั้งโปรเจ็ค — ใช้ให้เหมือนกันทุกหน้าที่มีตารางบอกผลถูก/ผิด
+     ข้อมูลผิด (error)      -> พื้นแดงอ่อน  (.row-alert)
+     ข้อมูลถูกต้อง          -> พื้นเขียวอ่อน (.row-ok)
+     น่าสงสัย ควรตรวจทาน    -> พื้นเหลืองอ่อน (.row-warn)
+   แถวที่ยังไม่รู้ผล (เช่น ยังไม่ได้กดตรวจ) ปล่อยไม่ใส่คลาส ให้เป็นลายสลับแถวปกติ
+   ทุกคลาสต้องเขียนทับ :nth-child(2n) ด้วย ไม่งั้นแถวคู่จะกลบสีจนหาไม่เจอ */
 .data-table tbody tr.row-alert,
 .data-table tbody tr.row-alert:nth-child(2n) {
   background: #fef2f2;
@@ -668,6 +672,46 @@ a.version-check-new:hover {
 .data-table tbody tr.row-warn td {
   color: #92400e;
   font-weight: 500;
+}
+
+/* แถวที่ข้อมูลถูกต้องครบถ้วน — ใช้เขียวอ่อนกว่าสีแดง/เหลืองหนึ่งระดับ เพราะแถวที่ถูก
+   มักเป็นส่วนใหญ่ของตาราง ถ้าเข้มเท่ากันทั้งหน้าจะกลายเป็นสีเขียวพรืดจนแถวที่ต้องแก้
+   ไม่เด่นขึ้นมา และไม่เปลี่ยนสีตัวอักษร เพื่อให้ยังอ่านข้อมูลได้สบายตา */
+.data-table tbody tr.row-ok,
+.data-table tbody tr.row-ok:nth-child(2n) {
+  background: #f0fdf4;
+}
+
+.data-table tbody tr.row-ok:hover {
+  background: #dcfce7;
+}
+
+/* ---------- สีบอกสถานะสำหรับที่ที่ไม่ใช่แถวตาราง ---------- */
+
+/* กติกาสีเดียวกับแถวตาราง แต่ใช้กับรายการ/กล่อง/การ์ดได้ทุกที่ในโปรเจ็ค
+   (เช่น รายการผลนำเข้า 43 แฟ้ม, รายการค่าตั้งค่า NHSO, การ์ดหัวข้อตรวจ)
+   แยกคลาสไว้ต่างหากเพราะ .row-* ผูกกับ .data-table tbody tr เท่านั้น */
+.state-ok,
+.state-alert,
+.state-warn {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.state-ok {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.state-alert {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.state-warn {
+  background: #fffbeb;
+  border-color: #fde68a;
 }
 
 .data-table tbody tr:last-child td {
@@ -822,6 +866,145 @@ a.version-check-new:hover {
   font-weight: 600;
 }
 
+/* ป้ายจำนวนปัญหาบนหัวแท็บ — พอแยกแท็บแล้วการ์ดที่มีปัญหาในแท็บอื่นจะมองไม่เห็น
+   ถ้าไม่มีตัวเลขบอกไว้ตรงนี้ ผู้ใช้จะนึกว่าตรวจครบแล้วทั้งที่ยังไม่ได้เปิดดู */
+.tab-badge {
+  display: inline-block;
+  margin-left: 6px;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+.tab-badge-alert {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.tab-badge-ok {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+/* ---------- แท็บย่อยของตารางผลตรวจ (ผ่าน / ไม่ผ่าน) ---------- */
+
+/* บรรทัดนับจำนวน — ต้องเห็นก่อนตาราง เพราะคนเปิดดูรายละเอียดอยากรู้สัดส่วน
+   ผ่าน/ไม่ผ่าน ก่อนจะไล่อ่านรายแถว */
+.precheck-tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  margin: 8px 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.tally-pass {
+  color: #15803d;
+}
+
+.tally-fail {
+  color: #b91c1c;
+}
+
+.tally-warn {
+  color: #92400e;
+}
+
+.tally-total {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* สรุปว่าที่ไม่ผ่านนั้นเป็นเพราะอะไรบ้าง อย่างละกี่ราย */
+.precheck-reasons {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-left: 3px solid #fca5a5;
+  background: #fef2f2;
+  border-radius: 4px;
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: #7f1d1d;
+}
+
+.subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+/* ปุ่มติดสีตามความหมายตั้งแต่ยังไม่ได้กด เพื่อให้กวาดตาเห็นทันทีว่าไม่ผ่านกี่ราย
+   ผ่านกี่ราย ไม่ต้องกดเข้าไปดูทีละแท็บ ปุ่มที่กดอยู่จึงต้องเข้มกว่าชัดๆ
+   (พื้นทึบ + ขอบหนา) ไม่งั้นจะแยกไม่ออกว่าตอนนี้ดูกลุ่มไหนอยู่ */
+.subtab {
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+}
+
+.subtab:hover {
+  filter: brightness(0.97);
+}
+
+.subtab-fail {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.subtab-warn {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.subtab-pass {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
+.subtab.active {
+  border-width: 2px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.subtab-fail.active {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #fff;
+}
+
+.subtab-warn.active {
+  background: #b45309;
+  border-color: #b45309;
+  color: #fff;
+}
+
+.subtab-pass.active {
+  background: #15803d;
+  border-color: #15803d;
+  color: #fff;
+}
+
+.subtab.active:not(.subtab-fail):not(.subtab-warn):not(.subtab-pass) {
+  background: #334155;
+  border-color: #334155;
+  color: #fff;
+}
+
 /* ---------- Toast (แจ้งเตือนเด้งด้านบน) ---------- */
 
 .toast {
@@ -914,6 +1097,19 @@ a.version-check-new:hover {
   border-radius: 12px;
   background: var(--surface);
   padding: 14px 16px;
+}
+
+/* การ์ดที่ตรวจแล้วติดสีตามผล จะได้กวาดตาเห็นทั้งแถบว่าใบไหนต้องแก้ ไม่ต้องอ่าน
+   ป้ายสถานะทีละใบ — ใบที่ยังไม่ได้ตรวจคงพื้นขาวไว้ เพราะยังไม่รู้ผล
+   ต้องเขียนคู่กับ .precheck-card ให้ specificity ชนะ background ของบรรทัดบน */
+.precheck-card.state-ok {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.precheck-card.state-alert {
+  background: #fef2f2;
+  border-color: #fecaca;
 }
 
 .precheck-card-head {

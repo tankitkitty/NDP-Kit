@@ -28,9 +28,12 @@ export default function Home({ loginname, hospitalName }: { loginname: string; h
           </div>
         </div>
         <div className="toolbar">
+          {/* ปิดปุ่มนำเข้า 43 แฟ้มไว้ให้ตรงกับแถบเมนูซ้ายที่ปิดไปแล้ว ตัวหน้ายังอยู่ครบ
+              เข้าถึงได้ทาง URL ตรงๆ — ถ้าจะเปิดใช้อีกครั้ง เอาบรรทัดล่างนี้กลับมา
           <Link href="/import-43file" className="button-primary">
             นำเข้า 43 แฟ้ม
           </Link>
+          */}
           <Link href="/eclaim-fee-schedule" className="button-primary">
             ตรวจสอบ eClaim Fee Schedule
           </Link>

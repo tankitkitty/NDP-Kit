@@ -443,8 +443,14 @@ export default function Settings({
               (ไม่สามารถกรอก/บันทึกผ่านหน้านี้ได้ เพื่อป้องกันข้อมูลลับหลุด)
             </p>
             <div className="grid-form">
+              {/* ติดสีพื้นตามกติกาสีของโปรเจ็ค: ตั้งค่าแล้ว = เขียวอ่อน, ที่จำเป็นแต่ยังไม่ตั้ง = แดงอ่อน
+                  ส่วน optional ที่ไม่ได้ตั้งไม่ใช่ข้อผิดพลาด จึงปล่อยไม่ติดสี */}
               {nhsoStatus.items.map((item) => (
-                <div key={item.key} className="toolbar" style={{ justifyContent: "space-between" }}>
+                <div
+                  key={item.key}
+                  className={`toolbar ${item.set ? "state-ok" : item.required ? "state-alert" : ""}`}
+                  style={{ justifyContent: "space-between" }}
+                >
                   <span>{item.label}</span>
                   <span className={`status-pill ${item.set ? "status-y" : item.required ? "status-n" : "status-pending"}`}>
                     {item.set ? "ตั้งค่าแล้ว" : item.required ? "ยังไม่ได้ตั้งค่า" : "ไม่ได้ตั้งค่า (optional)"}

@@ -9,7 +9,6 @@ import {
   DatabaseIcon,
   FeeScheduleIcon,
   HomeIcon,
-  ImportIcon,
   IconProps,
   LogoutIcon,
   PrecheckIcon,
@@ -32,7 +31,9 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "หน้าแรก", Icon: HomeIcon },
-  { href: "/import-43file", label: "นำเข้า 43 แฟ้ม", Icon: ImportIcon },
+  // ปิดเมนูนำเข้า 43 แฟ้มไว้ก่อน ตัวหน้าและ API ยังอยู่ครบ เข้าถึงได้ทาง URL ตรงๆ
+  // ถ้าจะเปิดใช้อีกครั้ง เอาบรรทัดล่างนี้กลับมา (ImportIcon มีอยู่แล้วใน NavIcons)
+  // { href: "/import-43file", label: "นำเข้า 43 แฟ้ม", Icon: ImportIcon },
   { href: "/eclaim-fee-schedule", label: "eClaim Fee Schedule", Icon: FeeScheduleIcon },
   // ปิดเมนูตรวจสอบสิทธิไว้ก่อน ตัวหน้าและ API ยังอยู่ครบ เข้าถึงได้ทาง URL ตรงๆ
   // ถ้าจะเปิดใช้อีกครั้ง เอาบรรทัดล่างนี้กลับมา (EligibilityIcon มีอยู่แล้วใน NavIcons)

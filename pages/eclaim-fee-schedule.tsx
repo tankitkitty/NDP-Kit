@@ -73,6 +73,13 @@ function formatDate(value: string): string {
   return d.toLocaleString("th-TH", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+/** คลาสสีพื้นแถวตามสถานะการส่งเคลม (ดูกติกาสีแถวใน styles/globals.css) */
+function rowStatusClass(status: unknown) {
+  if (status === "Y") return "row-ok";
+  if (status === "N" || status === "C") return "row-alert";
+  return undefined;
+}
+
 function renderStatusPill(status: string | null) {
   if (status === "N") return <span className="status-pill status-n">ไม่สำเร็จ</span>;
   if (status === "Y") return <span className="status-pill status-y">สำเร็จ</span>;
@@ -491,8 +498,13 @@ export default function EclaimFeeSchedule({ loginname, hospitalName }: { loginna
                   </tr>
                 </thead>
                 <tbody>
+                  {/* สีพื้นแถวตามกติกาของโปรเจ็ค: ส่งสำเร็จ = เขียวอ่อน, ไม่สำเร็จ/ยกเลิก = แดงอ่อน
+                      ส่วนที่ยังไม่ส่งยังไม่รู้ผล จึงปล่อยเป็นแถวปกติ */}
                   {rows.map((row) => (
-                    <tr key={row.eclaim_fee_schedule_id}>
+                    <tr
+                      key={row.eclaim_fee_schedule_id}
+                      className={rowStatusClass(row.eclaim_fee_schedule_status)}
+                    >
                       <td className="action-col">
                         <div className="toolbar" style={{ flexWrap: "nowrap" }}>
                           <input
