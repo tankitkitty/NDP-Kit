@@ -8,6 +8,7 @@ import drugCatalog from "./checks/drugCatalog";
 import servicePrice from "./checks/servicePrice";
 import authCode from "./checks/authCode";
 import claimLog from "./checks/claimLog";
+import spcltyNhsoCode from "./checks/spcltyNhsoCode";
 
 /** ทะเบียนการ์ดตรวจสอบทั้งหมด (ลำดับ = ลำดับที่แสดงบน dashboard) */
 export const CHECKS: CheckDefinition[] = [
@@ -20,6 +21,9 @@ export const CHECKS: CheckDefinition[] = [
   servicePrice,
   authCode,
   claimLog,
+  // ต่อท้ายเสมอ ไม่แทรกกลาง เพราะเลขข้อบนหน้าเว็บถูกอ้างถึงจากที่อื่น
+  // (setup-checklist ชี้ไปที่ "การ์ดข้อ 8") แทรกกลางแล้วเลขจะเลื่อนทั้งแถบ
+  spcltyNhsoCode,
 ];
 
 export function getCheck(id: string): CheckDefinition | undefined {

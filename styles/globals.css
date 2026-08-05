@@ -638,6 +638,22 @@ a.version-check-new:hover {
   background: #f3f6fb;
 }
 
+/* แถวที่ต้องแก้ในตารางที่แสดงข้อมูลทั้งชุด ต้องชนะทั้งลายสลับแถวและ hover
+   ไม่งั้นแถวคู่จะกลบสีแดงจนหาไม่เจอว่าแถวไหนคือแถวที่มีปัญหา */
+.data-table tbody tr.row-alert,
+.data-table tbody tr.row-alert:nth-child(2n) {
+  background: #fef2f2;
+}
+
+.data-table tbody tr.row-alert:hover {
+  background: #fee2e2;
+}
+
+.data-table tbody tr.row-alert td {
+  color: #b91c1c;
+  font-weight: 500;
+}
+
 .data-table tbody tr:last-child td {
   border-bottom: none;
 }

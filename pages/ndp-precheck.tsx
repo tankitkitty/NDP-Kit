@@ -43,6 +43,7 @@ const QUERY_CARDS: CardMeta[] = [
   { id: "service-price", no: 7, title: "ราคาที่คีย์จริงเทียบราคาตั้งต้น", description: "opitemrece.unitprice เทียบ drugitems.unitprice ในช่วงวันที่ที่เลือก", needsRange: true },
   { id: "auth-code", no: 9, title: "เคสที่ยังไม่มีเลขปิดสิทธิ (Authorization)", description: "visit ในช่วงวันที่ที่เลือกที่ยังไม่มี auth_code — ต้องปิดสิทธิ/ออกใบแจ้งหนี้ก่อนส่งเคลม", needsRange: true },
   { id: "claim-log", no: 10, title: "ประวัติการส่งเคลมล่าสุด", description: "ค้นหาตาราง log การส่ง NDP/eClaim ในฐานอัตโนมัติ แล้วแสดงรายการส่งล่าสุดพร้อม error (ถ้ามี)" },
+  { id: "spclty-nhso-code", no: 11, title: "รหัสแผนกของ สปสช. (spclty.nhso_code)", description: "แสดงการ map แผนกทั้งหมดกับรหัส สปสช. และเน้นสีแดงแถวที่รหัสไม่ใช่ 01-12" },
 ];
 
 // ---------- การ์ดที่ 8: checklist รหัสบริการคัดกรอง NDP (อ้างอิง ไม่ query เพราะรหัสแต่ละหน่วยต่างกัน) ----------
@@ -216,8 +217,11 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
                 </tr>
               </thead>
               <tbody>
+                {/* _alert เป็นคีย์พิเศษที่ฝั่ง check ใส่มาเพื่อขอให้เน้นแถวเป็นสีแดง
+                    (ดู ROW_ALERT_KEY ใน lib/precheck/types.ts) ไม่ใช่คอลัมน์จริง
+                    จึงไม่ถูกวาดเป็นช่องในตาราง */}
                 {section.rows.map((row, i) => (
-                  <tr key={i}>
+                  <tr key={i} className={row._alert ? "row-alert" : undefined}>
                     {section.columns.map((c) => (
                       <td key={c.key} className="wrap">
                         {row[c.key] === null || row[c.key] === undefined || row[c.key] === "" ? (
