@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type UpdateInfo = {
   supported: boolean;
@@ -28,24 +28,39 @@ export default function UpdateBanner() {
   const [stagedOnly, setStagedOnly] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [startError, setStartError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState("");
+  const [checkedAt, setCheckedAt] = useState("");
   const startedAt = useRef(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/update");
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled && data.supported && data.hasUpdate) setInfo(data);
-      } catch {
-        // ตรวจไม่ได้ก็ไม่ต้องแสดงอะไร
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  /**
+   * ถาม GitHub ว่ามีเวอร์ชันใหม่ไหม
+   *
+   * เดิมเก็บผลไว้เฉพาะตอนมีอัปเดต ถ้าไม่มีหรือถามไม่สำเร็จจะไม่แสดงอะไรเลย ผู้ใช้
+   * จึงแยกไม่ออกระหว่าง "ใช้ตัวล่าสุดอยู่แล้ว" กับ "ตรวจไม่ได้เพราะต่อ GitHub ไม่ติด"
+   * ตอนนี้เก็บผลทุกกรณีเพื่อให้บอกได้ตรงๆ ทั้งสองแบบ
+   */
+  const check = useCallback(async (manual: boolean) => {
+    if (manual) setChecking(true);
+    setCheckError("");
+    try {
+      const res = await fetch("/api/update", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `เซิร์ฟเวอร์ตอบกลับรหัส ${res.status}`);
+      setInfo(data);
+      setCheckedAt(new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }));
+    } catch (error: any) {
+      setCheckError(error?.message || "ตรวจสอบเวอร์ชันไม่สำเร็จ");
+    } finally {
+      setLoaded(true);
+      if (manual) setChecking(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void check(false);
+  }, [check]);
 
   // นับเวลาที่ผ่านไป เพื่อให้ผู้ใช้เห็นว่าระบบยังเดินอยู่ ไม่ได้ค้าง
   useEffect(() => {
@@ -109,6 +124,21 @@ export default function UpdateBanner() {
           return;
         }
 
+        // สลับไฟล์เสร็จแล้ว โปรแกรมกลับมาแล้ว แต่เวอร์ชันไม่ขยับ
+        //
+        // ถ้าไม่ดักกรณีนี้ หน้าเว็บจะรอเวอร์ชันใหม่ที่ไม่มีวันมาถึงจนค้างอยู่ที่ขั้นที่ 2
+        // ตลอดไป โดยที่ทุกอย่างรายงานว่าสำเร็จหมด (เจอจริงตอนอัปเดต v2.0.7 เป็น
+        // v2.0.8 แล้วแคชของเครือข่ายคืนไฟล์ v2.0.7 กลับมา)
+        if (data.stage === "done" && target && data.current && data.current !== target) {
+          setFailed(true);
+          setErrorMsg(
+            `ติดตั้งเสร็จแล้วแต่โปรแกรมยังเป็น ${data.current} ไม่ใช่ ${target} ` +
+              `แปลว่าไฟล์ที่ดาวน์โหลดมาเป็นเวอร์ชันเก่า`
+          );
+          clearInterval(poll);
+          return;
+        }
+
         // ไฟล์ใหม่พร้อมแล้วแต่ยังไม่ถูกสลับ แปลว่าเปิดโปรแกรมใหม่อัตโนมัติไม่สำเร็จ
         //
         // ต้องนับ restarting ด้วย เพราะถ้าโปรแกรมสั่งเปิดตัวใหม่แล้วปิดตัวเองสำเร็จจริง
@@ -134,9 +164,50 @@ export default function UpdateBanner() {
     }, 2000);
   }
 
-  if (!info) return null;
+  // ยังไม่ได้ถามครั้งแรก อย่าเพิ่งวาดอะไร ไม่งั้นการ์ดจะกะพริบตอนโหลดหน้า
+  if (!loaded) return null;
 
   const running = stepIndex >= 0;
+  const hasUpdate = !!(info && info.supported && info.hasUpdate);
+
+  // ไม่มีอะไรให้อัปเดต: แสดงการ์ดเล็กบอกเวอร์ชันที่ใช้อยู่ พร้อมปุ่มให้กดตรวจเองได้
+  // เพราะการตรวจอัตโนมัติเกิดตอนเปิดหน้าเท่านั้น ถ้าเพิ่งมีเวอร์ชันใหม่ออกระหว่างที่
+  // เปิดหน้าค้างไว้ ผู้ใช้จะไม่มีทางรู้เลยถ้าไม่มีปุ่มนี้
+  if (!hasUpdate && !running) {
+    return (
+      <div
+        className="page-card"
+        style={{
+          marginBottom: 20,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <strong>เวอร์ชันที่ใช้อยู่ {info?.current || "(ไม่ทราบ)"}</strong>
+          <div style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: 2 }}>
+            {checkError ? (
+              <span style={{ color: "#b42318" }}>{checkError}</span>
+            ) : info && !info.supported ? (
+              "เครื่องนี้ไม่ได้ติดตั้งผ่านตัวช่วยติดตั้ง จึงอัปเดตจากหน้าเว็บไม่ได้"
+            ) : (
+              `ใช้เวอร์ชันล่าสุดอยู่แล้ว${checkedAt ? ` — ตรวจสอบเมื่อ ${checkedAt} น.` : ""}`
+            )}
+          </div>
+        </div>
+        <button className="button-ghost" onClick={() => check(true)} disabled={checking}>
+          {checking ? "กำลังตรวจสอบ..." : "ตรวจสอบเวอร์ชัน"}
+        </button>
+      </div>
+    );
+  }
+
+  // มาถึงตรงนี้ได้แปลว่ามีอัปเดตหรือกำลังอัปเดตอยู่ ซึ่งทั้งสองกรณีมี info เสมอ
+  if (!info) return null;
+
   const percent = running ? Math.round(((stepIndex + 1) / STEPS.length) * 100) : 0;
   const finished = stepIndex === STEPS.length - 1;
 
