@@ -235,7 +235,9 @@ export async function stageUpdate(tag: string): Promise<void> {
     writeUpdateStage("extracting");
     fs.rmSync(stageDir, { recursive: true, force: true });
 
-    new AdmZip(zipPath).extractAllTo(stageDir, true);
+    const zip = new AdmZip(zipPath);
+    assertNoPathTraversal(zip, stageDir);
+    zip.extractAllTo(stageDir, true);
 
     if (!fs.existsSync(path.join(stageDir, "server.js"))) {
       throw new Error("ไฟล์ที่ดาวน์โหลดมาไม่สมบูรณ์ (ไม่พบ server.js)");
@@ -262,6 +264,30 @@ export async function stageUpdate(tag: string): Promise<void> {
     writeUpdateError(String(error?.message || error));
     writeUpdateStage("failed");
     throw error;
+  }
+}
+
+/**
+ * ปฏิเสธไฟล์อัปเดตที่มี entry ชี้ออกนอกโฟลเดอร์ปลายทาง (Zip Slip)
+ *
+ * ตัวแตกไฟล์เชื่อชื่อ entry ตามที่เขียนมาในไฟล์ zip ถ้ามี entry ชื่อ "..\..\start.cmd"
+ * หรือ path แบบเต็ม (C:\...) มันจะเขียนทับไฟล์นอก app.new ให้เลย ซึ่งกลายเป็นการ
+ * รันโค้ดบนเครื่องหน่วยบริการได้ทันทีในรอบเปิดโปรแกรมถัดไป
+ *
+ * ต่อให้ไฟล์มาจาก GitHub ผ่าน https ก็ยังต้องตรวจ เพราะถ้าบัญชีผู้ดูแลถูกยึด
+ * หรือมีใครแนบไฟล์ปลอมกับ release ได้ ทุกหน่วยบริการจะดึงไปรันพร้อมกันทั้งหมด
+ */
+function assertNoPathTraversal(zip: AdmZip, targetDir: string): void {
+  const root = path.resolve(targetDir);
+  for (const entry of zip.getEntries()) {
+    const name = entry.entryName;
+    if (name.includes("\0")) {
+      throw new Error("ไฟล์อัปเดตมีชื่อไฟล์ผิดปกติ ไม่ปลอดภัยที่จะแตกไฟล์");
+    }
+    const resolved = path.resolve(root, name);
+    if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+      throw new Error(`ไฟล์อัปเดตพยายามเขียนไฟล์นอกโฟลเดอร์ที่กำหนด (${name}) — ยกเลิกการอัปเดตเพื่อความปลอดภัย`);
+    }
   }
 }
 

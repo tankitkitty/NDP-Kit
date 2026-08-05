@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
 import { getSession } from "../lib/session";
@@ -42,7 +42,7 @@ const QUERY_CARDS: CardMeta[] = [
   { id: "provider", title: "ข้อมูลบุคลากรทางการแพทย์ (PROVIDER)", description: "เลขใบประกอบวิชาชีพ / เลขบัตร ปชช. / provider_type ต้องครบ และกลุ่มวิชาชีพ (แพทย์ ทันตแพทย์ พยาบาล เภสัชกร ฯลฯ) ต้องมีรหัสสภาวิชาชีพ 01-08" },
   { id: "pttype-config", title: "การตั้งค่าสิทธิการรักษา (pttype)", description: "noexpire / export_eclaim / is_pttype_plan / default_request_funds / paidst='02' / price group (1=OFC/LGO, 2=UC/WEL)" },
   { id: "token", title: "Token สำหรับส่งแฟ้ม 13 แฟ้ม", description: "sys_var (%token%) ต้องมีค่า และ NHSO token ต้องยังไม่หมดอายุ" },
-  { id: "drug-catalog", title: "รหัสยาเทียบ Drug Catalog / TMT", description: "sks_drug_code, ราคา และหมวด income ต้องตรงกับ Drug Catalog รายการล่าสุด" },
+  { id: "drug-catalog", title: "รหัสยาเทียบ Drug Catalog / TMT", description: "drugitems.sks_drug_code และราคา ต้องตรงกับ TMT/ราคาใน Drug Catalog รายการล่าสุด" },
   { id: "service-price", title: "ราคาที่คีย์จริงเทียบราคาตั้งต้น", description: "opitemrece.unitprice เทียบ drugitems.unitprice ในช่วงวันที่ที่เลือก", needsRange: true },
   { id: "auth-code", title: "เคสที่ยังไม่มีเลขปิดสิทธิ (Authorization)", description: "visit ในช่วงวันที่ที่เลือกที่ยังไม่มี auth_code — ต้องปิดสิทธิ/ออกใบแจ้งหนี้ก่อนส่งเคลม", needsRange: true },
   { id: "claim-log", title: "ประวัติการส่งเคลมล่าสุด", description: "ค้นหาตาราง log การส่ง NDP/eClaim ในฐานอัตโนมัติ แล้วแสดงรายการส่งล่าสุดพร้อม error (ถ้ามี)" },
@@ -54,21 +54,13 @@ const QUERY_CARDS: CardMeta[] = [
   { id: "condom", title: "บริการถุงยางพร้อมให้คำปรึกษา (ICD-10 Z30 + bill code)", description: "เคสถุงยางพร้อมให้คำปรึกษาต้องมีทั้ง ICD-10 Z30/Z300/Z304/Z309 และรายการค่าบริการ bill code 6201001/6201005/6201006/6201007", needsRange: true },
 ];
 
-/** id สมมติของการ์ดข้อ 8 ซึ่งเป็น checklist ติ๊กเอง ไม่ได้ query (ใช้จัดลำดับในแท็บ) */
-const SERVICE_CHECKLIST_ID = "ndp-service-checklist";
-
 /**
  * แบ่งการ์ดเป็นแท็บตามลักษณะงานของคนที่ต้องแก้
  *
- * เดิมเรียงยาวใบเดียวในหน้าเดียว ต้องเลื่อนหาว่าใบไหนอยู่ตรงไหน แท็บช่วยแยกว่างาน
- * ตรวจข้อมูลบริการ (ทำทุกรอบส่งเคลม) กับงานตั้งค่าระบบ (ทำครั้งเดียว) คนละเรื่องกัน
- *
  * เรียงแท็บตรวจข้อมูลการบริการไว้เป็นอันแรกและเป็นแท็บที่เปิดมาเจอ เพราะเป็นงานที่
- * ต้องทำซ้ำทุกรอบ ส่วนอีกสองแท็บเป็นการตั้งค่าซึ่งมีปุ่มตรวจของตัวเองแยกในแต่ละใบ
- * ทำครั้งเดียวก็จบ จึงย้ายไปท้ายสุด
+ * ต้องทำซ้ำทุกรอบส่งเคลม ส่วนอีกสองแท็บเป็นการตั้งค่าที่ทำครั้งเดียวก็จบ
  *
- * เลขข้อของการ์ดยังเรียงตามเดิม (ไม่ได้เรียงตามแท็บ) เพื่อให้หน้า setup-checklist
- * ที่อ้างถึง "การ์ดข้อ 8" ยังชี้ถูกใบเหมือนเดิม
+ * ลำดับใน ids คือลำดับที่แสดงและเป็นที่มาของเลขข้อบนการ์ด (ดู CARD_NO)
  */
 const TABS: { key: string; label: string; hint: string; ids: string[] }[] = [
   {
@@ -87,7 +79,7 @@ const TABS: { key: string; label: string; hint: string; ids: string[] }[] = [
     key: "codes",
     label: "รหัสบริการและราคา",
     hint: "รหัสยา/ค่าบริการและราคาที่ใช้อ้างอิงตอนส่งเคลม",
-    ids: ["drug-catalog", "service-price", SERVICE_CHECKLIST_ID],
+    ids: ["drug-catalog", "service-price"],
   },
 ];
 
@@ -104,21 +96,6 @@ for (const tab of TABS) {
     CARD_NO[id] = i + 1;
   });
 }
-
-// ---------- การ์ดที่ 8: checklist รหัสบริการคัดกรอง NDP (อ้างอิง ไม่ query เพราะรหัสแต่ละหน่วยต่างกัน) ----------
-const NDP_SERVICE_ITEMS: { key: string; label: string; hint: string }[] = [
-  { key: "hpv", label: "คัดกรองมะเร็งปากมดลูก (HPV)", hint: "ตั้งรหัสค่าบริการเก็บสิ่งส่งตรวจ/ค่าตรวจ HPV ให้ตรง Fee Schedule" },
-  { key: "dm", label: "คัดกรองเบาหวาน (FBS/DTX)", hint: "รหัสค่าตรวจน้ำตาลสำหรับกลุ่มเป้าหมายคัดกรอง" },
-  { key: "chol", label: "Cholesterol + HDL", hint: "รหัสค่าตรวจไขมันตามชุดสิทธิประโยชน์" },
-  { key: "cbc", label: "คัดกรองภาวะโลหิตจาง CBC (13-24 ปี)", hint: "รหัสค่าตรวจ CBC สำหรับช่วงอายุ 13-24 ปี" },
-  { key: "fluoride", label: "เคลือบฟลูออไรด์กลุ่มเสี่ยง", hint: "รหัสหัตถการทันตกรรมเคลือบฟลูออไรด์" },
-  { key: "fit", label: "คัดกรองมะเร็งลำไส้ใหญ่ (Fit Test)", hint: "รหัสค่าตรวจ Fit Test" },
-  { key: "hep", label: "คัดกรองไวรัสตับอักเสบ (HBsAg/Anti-HCV)", hint: "รหัสค่าตรวจไวรัสตับอักเสบ บี/ซี" },
-  { key: "flu", label: "วัคซีนไข้หวัดใหญ่ (ICD10 Z251) และวัคซีนอื่นๆ", hint: "ลงรหัสวัคซีน + ICD10 Z251 สำหรับไข้หวัดใหญ่ให้ครบ" },
-  { key: "contraceptive", label: "ยาคุมกำเนิด (ชนิดเม็ด/ฉีด)", hint: "ตั้งรหัสยา/ค่าบริการวางแผนครอบครัวให้เบิกได้" },
-  { key: "condom", label: "ถุงยางอนามัย", hint: "รหัสเวชภัณฑ์ถุงยางอนามัยตามสิทธิประโยชน์" },
-];
-const NDP_SERVICE_STORE_KEY = "ndp-service-checklist-v1";
 
 const DEFAULT_RANGE = getCurrentMonthRange();
 
@@ -161,37 +138,11 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
     if (typeof wanted === "string" && TABS.some((t) => t.key === wanted)) setActiveTab(wanted);
   }, [router.query.tab]);
 
-  // การ์ด checklist อ้างอิง เก็บสถานะใน localStorage
-  const [serviceChecked, setServiceChecked] = useState<Record<string, boolean>>({});
-  const [serviceExpanded, setServiceExpanded] = useState(false);
-
-  // modal ยืนยันก่อนรัน UPDATE (แยกจากปุ่ม copy เสมอ)
+  // modal ยืนยันก่อนรัน UPDATE (แยกจากปุ่มอื่นเสมอ เพราะรันแล้วย้อนกลับไม่ได้)
   const [fixTarget, setFixTarget] = useState<CardMeta | null>(null);
   const [fixBackupAck, setFixBackupAck] = useState(false);
   const [fixRunning, setFixRunning] = useState(false);
   const [fixMessage, setFixMessage] = useState<{ text: string; error: boolean } | null>(null);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(NDP_SERVICE_STORE_KEY);
-      if (raw) setServiceChecked(JSON.parse(raw));
-    } catch {
-      /* ค่าเสีย ใช้ค่าว่างแทน */
-    }
-  }, []);
-
-  function toggleService(key: string) {
-    setServiceChecked((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
-      localStorage.setItem(NDP_SERVICE_STORE_KEY, JSON.stringify(next));
-      return next;
-    });
-  }
-
-  const serviceDone = useMemo(
-    () => NDP_SERVICE_ITEMS.filter((i) => serviceChecked[i.key]).length,
-    [serviceChecked]
-  );
 
   function getState(id: string): CardState {
     return cards[id] || { loading: false, outcome: null, expanded: false, fetchError: null };
@@ -516,50 +467,6 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
     );
   }
 
-  /** การ์ดข้อ 8: checklist อ้างอิง (ไม่ query — รหัสของแต่ละหน่วยบริการต่างกัน) */
-  function renderServiceChecklist() {
-    return (
-      <div className="precheck-card" key={SERVICE_CHECKLIST_ID}>
-        <div className="precheck-card-head">
-          <div style={{ minWidth: 0 }}>
-            <div className="precheck-card-title">
-              {CARD_NO[SERVICE_CHECKLIST_ID]}. รหัสบริการคัดกรองตามที่ NDP กำหนด (checklist อ้างอิง)
-            </div>
-            <div className="precheck-card-desc">
-              รหัสค่าบริการ/หัตถการของแต่ละหน่วยบริการไม่เหมือนกัน จึงให้ติ๊กยืนยันเองว่าตั้งรหัสครบแล้ว (สถานะเก็บในเครื่องนี้)
-            </div>
-          </div>
-          <div className="precheck-card-actions">
-            {serviceDone === NDP_SERVICE_ITEMS.length ? (
-              <span className="status-pill status-y">✅ ครบ {serviceDone}/{NDP_SERVICE_ITEMS.length}</span>
-            ) : (
-              <span className="status-pill status-pending">ทำแล้ว {serviceDone}/{NDP_SERVICE_ITEMS.length}</span>
-            )}
-            <button className="button-ghost precheck-small-btn" onClick={() => setServiceExpanded(!serviceExpanded)}>
-              {serviceExpanded ? "ซ่อนรายการ" : "ดูรายการ"}
-            </button>
-          </div>
-        </div>
-        {serviceExpanded ? (
-          <div className="precheck-card-body">
-            {NDP_SERVICE_ITEMS.map((item) => (
-              <label key={item.key} className="precheck-check-item">
-                <input type="checkbox" checked={Boolean(serviceChecked[item.key])} onChange={() => toggleService(item.key)} />
-                <span>
-                  <span style={{ fontWeight: 600 }}>{item.label}</span>
-                  <span style={{ display: "block", color: "var(--muted)", fontSize: "0.85rem" }}>{item.hint}</span>
-                </span>
-              </label>
-            ))}
-            <div className="precheck-note">
-              ตรวจรหัสได้จากหน้าจอค่ารักษาพยาบาล/หัตถการใน HOSxP เทียบกับประกาศ Fee Schedule ของ สปสช. ฉบับล่าสุด
-            </div>
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
   /**
    * ป้ายบนหัวแท็บ: บอกว่าแท็บนั้นมีการ์ดที่ยังมีปัญหากี่ใบ
    * จำเป็นเพราะพอแยกแท็บแล้ว การ์ดที่มีปัญหาในแท็บอื่นจะมองไม่เห็น
@@ -637,7 +544,6 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
 
         <div className="precheck-list">
           {currentTab.ids.map((id) => {
-            if (id === SERVICE_CHECKLIST_ID) return renderServiceChecklist();
             const meta = QUERY_CARDS.find((c) => c.id === id);
             return meta ? renderCard(meta) : null;
           })}

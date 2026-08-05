@@ -401,6 +401,24 @@ sh.Run """" & base & "start.cmd""", 0, False
     else { Warn 'ตั้งให้เปิดอัตโนมัติไม่สำเร็จ - เปิดเองได้ที่เมนู 4' }
   } catch { Warn 'ตั้งให้เปิดอัตโนมัติไม่สำเร็จ - เปิดเองได้ที่เมนู 4' }
 
+  # เปิดพอร์ตให้เครื่องอื่นในหน่วยงานเข้าใช้ได้
+  #
+  # โปรแกรมเปิดรับทุกการ์ดเครือข่ายอยู่แล้ว แต่ Windows Firewall ปิดขาเข้าไว้เป็นค่าเริ่มต้น
+  # ถ้าไม่เปิดกฎนี้ เครื่องอื่นจะเข้าไม่ได้เลยทั้งที่โปรแกรมทำงานปกติ
+  #
+  # จำกัดเฉพาะโปรไฟล์ Private/Domain (เครือข่ายในหน่วยงาน) ไม่เปิดให้ Public
+  # เพราะถ้าเครื่องไปต่อ Wi-Fi สาธารณะจะกลายเป็นเปิดให้คนนอกเข้าถึงข้อมูลผู้ป่วย
+  Step "กำลังเปิดพอร์ต $port ใน Windows Firewall (เฉพาะเครือข่ายในหน่วยงาน) ..."
+  try {
+    $null = netsh advfirewall firewall delete rule name="NDP Kit" 2>&1
+    $null = netsh advfirewall firewall add rule name="NDP Kit" dir=in action=allow `
+      protocol=TCP localport=$port profile=private,domain 2>&1
+    if ($LASTEXITCODE -eq 0) { Ok 'เปิดพอร์ตให้เครื่องอื่นในหน่วยงานเข้าใช้ได้แล้ว' }
+    else { Warn "เปิดพอร์ตไม่สำเร็จ - เครื่องอื่นอาจเข้าไม่ได้ (เปิดเองได้ที่ Windows Firewall พอร์ต $port)" }
+  } catch {
+    Warn "เปิดพอร์ตไม่สำเร็จ - เครื่องอื่นอาจเข้าไม่ได้ (เปิดเองได้ที่ Windows Firewall พอร์ต $port)"
+  }
+
   Head 'ขั้นตอนที่ 5/5 : เริ่มโปรแกรม'
   Step 'กำลังเริ่มโปรแกรม ...'
   [void](Start-App)
@@ -414,6 +432,9 @@ sh.Run """" & base & "start.cmd""", 0, False
   foreach ($u in (Get-LanUrls $port)) {
     Write-Host "  จากเครื่องอื่นใน LAN    : $u" -ForegroundColor Green
   }
+  Write-Host ''
+  Write-Host '  ** การเชื่อมต่อเป็น http ธรรมดา ข้อมูลผู้ป่วยและรหัสผ่านจะไม่ถูกเข้ารหัสระหว่างทาง' -ForegroundColor Yellow
+  Write-Host '     ให้ใช้เฉพาะในเครือข่ายภายในของหน่วยงานที่เชื่อถือได้ ห้ามเปิดออกอินเทอร์เน็ต' -ForegroundColor Yellow
   Write-Host ''
   Write-Host '  สิ่งที่ต้องทำต่อ' -ForegroundColor White
   Step '1. เปิดหน้าเว็บด้านบน แล้วไปเมนู "ตั้งค่าการเชื่อมต่อ"'

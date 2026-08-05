@@ -10,9 +10,21 @@ const MAX_FAILED_ATTEMPTS = 10;
 const WINDOW_MS = 15 * 60 * 1000;
 const failedAttempts = new Map<string, { count: number; firstAt: number }>();
 
+/**
+ * IP ของผู้เรียก ใช้เป็นกุญแจของตัวนับการล็อกอินผิด
+ *
+ * ห้ามเชื่อ x-forwarded-for โดยไม่มีเงื่อนไข เพราะโปรแกรมนี้รับ request ตรงจาก
+ * เบราว์เซอร์ ไม่ได้อยู่หลัง reverse proxy ใครก็ใส่ header นี้เองมาคนละค่าทุกครั้ง
+ * เพื่อให้ตัวนับขึ้นคนละช่อง แล้วเดารหัสผ่านได้ไม่จำกัด (รหัสผ่าน HOSxP เป็น MD5
+ * ไม่มี salt ยิ่งต้องกันการเดาให้อยู่)
+ *
+ * ถ้าติดตั้งไว้หลัง proxy จริง ให้ตั้ง env TRUST_PROXY=1 เพื่อกลับไปอ่าน header
+ */
 function getClientIp(req: NextApiRequest): string {
-  const xff = req.headers["x-forwarded-for"];
-  if (typeof xff === "string" && xff.length > 0) return xff.split(",")[0].trim();
+  if (process.env.TRUST_PROXY === "1") {
+    const xff = req.headers["x-forwarded-for"];
+    if (typeof xff === "string" && xff.length > 0) return xff.split(",")[0].trim();
+  }
   return req.socket?.remoteAddress || "unknown";
 }
 
@@ -42,6 +54,29 @@ function recordFailure(ip: string) {
   } else {
     rec.count += 1;
   }
+}
+
+/**
+ * คำขอนี้มาทาง HTTPS จริงหรือไม่
+ *
+ * ต้องดูจาก "ช่องทางจริง" ไม่ใช่ NODE_ENV แบบเดิม เพราะแพ็กเกจที่หน่วยบริการใช้ถูก
+ * ตั้ง NODE_ENV=production เสมอ (Next ตั้งให้ใน server.js ของโหมด standalone)
+ * แต่เปิดผ่าน http:// ธรรมดา — cookie ที่ติด Secure บนหน้า http จะถูกเบราว์เซอร์
+ * ทิ้งทันที (ยกเว้น localhost) ผลคือเข้าจากเครื่องอื่นในวง LAN แล้วล็อกอิน "สำเร็จ"
+ * แต่เด้งกลับหน้าล็อกอินวนไปไม่รู้จบ โดยไม่มีอะไรบอกสาเหตุ
+ *
+ * ตั้งแบบนี้จึงได้ทั้งสองอย่าง: ใช้ HTTPS เมื่อไหร่ cookie ก็ถูกล็อกด้วย Secure
+ * ทันที ส่วนที่ยังเป็น http ก็ยังใช้งานได้ (ป้องกันด้วย HttpOnly + SameSite เท่าเดิม)
+ */
+function isSecureRequest(req: NextApiRequest): boolean {
+  if ((req.socket as any)?.encrypted) return true;
+  // อ่าน header ได้เฉพาะตอนบอกไว้ว่าอยู่หลัง proxy จริง ไม่งั้นใครก็ปลอมมาได้
+  if (process.env.TRUST_PROXY === "1") {
+    const proto = req.headers["x-forwarded-proto"];
+    const value = Array.isArray(proto) ? proto[0] : proto;
+    if (typeof value === "string" && value.split(",")[0].trim() === "https") return true;
+  }
+  return false;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -92,7 +127,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     markSetupComplete();
 
     const sessionValue = createSessionValue(user.officer_login_name);
-    const secureFlag = process.env.NODE_ENV === "production" ? "; Secure" : "";
+    const secureFlag = isSecureRequest(req) ? "; Secure" : "";
     res.setHeader(
       "Set-Cookie",
       `${SESSION_COOKIE_NAME}=${sessionValue}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE_SECONDS}${secureFlag}`

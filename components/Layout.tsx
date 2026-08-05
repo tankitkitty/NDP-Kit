@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 import { ReactNode, useEffect, useState } from "react";
 import Head from "next/head";
 import Link from "next/link";
@@ -26,6 +27,7 @@ const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "";
 interface NavItem {
   href: string;
   label: string;
+  // React 19 เลิกประกาศ JSX เป็น global namespace แล้ว ต้อง import type มาใช้เอง
   Icon: (props: IconProps) => JSX.Element;
 }
 

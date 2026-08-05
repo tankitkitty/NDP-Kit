@@ -57,6 +57,64 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: resolveAppVersion(),
   },
+
+  // ไม่ต้องประกาศให้ใครรู้ว่าเบื้องหลังเป็น Next.js เวอร์ชันไหน
+  poweredByHeader: false,
+
+  /**
+   * ห้ามให้ไฟล์ในโฟลเดอร์ data/ ติดไปกับแพ็กเกจ standalone เด็ดขาด
+   *
+   * ในนั้นคือรหัสผ่าน MySQL ของหน่วยบริการ (dbconfig.json) และกุญแจเซ็น session
+   * (.session-secret) ถ้าใครสร้างแพ็กเกจจากเครื่องที่เคยตั้งค่าใช้งานจริงแล้วอัปขึ้น
+   * GitHub Release ซึ่งเป็นที่สาธารณะ เท่ากับแจกรหัสผ่านฐานข้อมูลให้คนทั้งโลก
+   *
+   * ปกติ CI สร้างแพ็กเกจจาก checkout ใหม่ที่ไม่มีโฟลเดอร์นี้อยู่แล้ว (ถูก gitignore)
+   * แต่กันไว้ตรงนี้ด้วย เพราะพลาดครั้งเดียวก็แก้กลับไม่ได้แล้ว
+   */
+  outputFileTracingExcludes: {
+    "*": ["./data/**"],
+  },
+
+  /**
+   * หัวข้อความปลอดภัยพื้นฐานของทุกหน้า
+   *
+   * หน้าจอนี้แสดงข้อมูลผู้ป่วย (ชื่อ HN เลขบัตร) จึงต้องกันไม่ให้เว็บอื่นเอาไป
+   * ซ้อนใน iframe เพื่อหลอกให้กดปุ่ม (clickjacking) และกันไม่ให้ที่อยู่ของหน้า
+   * รั่วไปกับ referrer เวลาเปิดลิงก์ออกนอก
+   *
+   * CSP อนุญาต 'unsafe-inline' สำหรับ style เพราะทั้งโปรเจ็คใช้ style ติดใน
+   * แท็กอยู่หลายที่ ส่วน script จำกัดไว้ที่ต้นทางเดียวกัน ('unsafe-inline' ของ
+   * script จำเป็นสำหรับตัว runtime ของ Next ที่ฝัง JSON ข้อมูลหน้าไว้ในเพจ)
+   * ไม่มีการโหลดสคริปต์หรือฟอนต์จากภายนอกเลย (ฟอนต์ self-host อยู่ใน public/)
+   */
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "same-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data:",
+              "font-src 'self'",
+              "connect-src 'self'",
+              "form-action 'self'",
+              "frame-ancestors 'none'",
+              "base-uri 'self'",
+              "object-src 'none'",
+            ].join("; "),
+          },
+        ],
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;

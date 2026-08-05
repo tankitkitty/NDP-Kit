@@ -217,49 +217,7 @@ const check: CheckDefinition = {
         })),
       });
 
-      // เทียบลำดับ doctor_position กับ doctor_position_std (id เดียวกันควรหมายถึงตำแหน่งเดียวกัน)
-      let positionNote = "";
-      let positionProblems = 0;
-      const posCols = await tableColumns("doctor_position");
-      const stdCols = await tableColumns("doctor_position_std");
-      if (posCols.size > 0 && stdCols.size > 0) {
-        try {
-          // ชื่อคอลัมน์ต่างกันตามรุ่น: doctor_position ใช้ id/name,
-          // doctor_position_std มักใช้ doctor_position_std_id/_name
-          const posId = pickCol(posCols, ["id", "doctor_position_id"]);
-          const posName = pickCol(posCols, ["name", "doctor_position_name"]);
-          const stdId = pickCol(stdCols, ["doctor_position_std_id", "id"]);
-          const stdName = pickCol(stdCols, ["doctor_position_std_name", "name"]);
-          if (!posId || !posName || !stdId || !stdName) {
-            throw new Error("ไม่รู้จักชื่อคอลัมน์ id/name ของตารางตำแหน่ง");
-          }
-          const posRows: any = await selectOnly(
-            `SELECT a.${posId} AS id, a.${posName} AS position_name, s.${stdName} AS std_name
-             FROM doctor_position a
-             LEFT JOIN doctor_position_std s ON s.${stdId} = a.${posId}
-             ORDER BY a.${posId}
-             LIMIT ${LIMIT}`
-          );
-          const graded = posRows.map((r: any) => ({ ...r, [ROW_ALERT_KEY]: !r.std_name }));
-          positionProblems = graded.filter((r: any) => r[ROW_ALERT_KEY]).length;
-          sections.push({
-            title: `เทียบ doctor_position กับ doctor_position_std (${positionProblems} รายการไม่มีคู่ std)`,
-            columns: [
-              { key: "id", label: "id" },
-              { key: "position_name", label: "doctor_position.name" },
-              { key: "std_name", label: "doctor_position_std.name (id เดียวกัน)" },
-            ],
-            rows: graded,
-            note: "ตรวจด้วยตาว่าชื่อสองคอลัมน์หมายถึงตำแหน่งเดียวกันหรือไม่ — ถ้าเหลื่อมลำดับกัน แฟ้ม PROVIDER จะส่งรหัสตำแหน่งผิด",
-          });
-        } catch {
-          positionNote = " (เทียบ doctor_position/doctor_position_std ไม่ได้ — โครงสร้างคอลัมน์ไม่ตรง ให้เปิดสองตารางนี้เทียบเองใน SQL Query)";
-        }
-      } else {
-        positionNote = " (ฐานนี้ไม่มีตาราง doctor_position/doctor_position_std)";
-      }
-
-      const problemCount = bad + positionProblems;
+      const problemCount = bad;
       const warnNote = warn > 0 ? ` และมี ${warn} คนที่รหัสสภาไม่ตรงกับวิชาชีพ (แถวสีเหลือง) ควรตรวจทาน` : "";
 
       return {
@@ -269,9 +227,7 @@ const check: CheckDefinition = {
         summary:
           (problemCount === 0
             ? `ข้อมูลบุคลากรครบถ้วนทั้ง ${total} คน`
-            : `พบ ${problemCount} รายการที่ข้อมูลบุคลากร/ตำแหน่งไม่ครบ (จากบุคลากร ${total} คน)`) +
-          warnNote +
-          positionNote,
+            : `พบ ${problemCount} คนที่ข้อมูลไม่ครบ (จากบุคลากร ${total} คน)`) + warnNote,
         sections,
         advice:
           "แฟ้ม PROVIDER ต้องมีเลขใบประกอบวิชาชีพ เลขบัตรประชาชน 13 หลัก และประเภทบุคลากร (provider_type) ครบทุกคนที่ยังปฏิบัติงาน\n\n" +
@@ -282,11 +238,10 @@ const check: CheckDefinition = {
           `รหัสสภาที่ใช้ได้มี 8 รหัส: ${COUNCILS.map((c) => `${c.code}=${c.name}`).join(", ")}\n\n` +
           "แถวสีเหลืองคือรหัสสภาที่กรอกไว้ไม่ตรงกับประเภทบุคลากร (เช่น พยาบาลแต่ใส่ 01 แพทยสภา) " +
           "ระบบเดาจากประเภทบุคลากรเท่านั้น ถ้าคนนั้นขึ้นทะเบียนหลายวิชาชีพจริงก็ปล่อยไว้ได้\n\n" +
-          "แก้ที่ HOSxP: Tools > ทะเบียนแพทย์/เจ้าหน้าที่ (ตาราง doctor) กรอกให้ครบแล้วกดตรวจซ้ำ " +
-          "ส่วนตารางตำแหน่ง ให้เทียบ doctor_position กับ doctor_position_std ให้ id ตรงความหมายเดียวกัน",
+          "แก้ที่ HOSxP: Tools > ทะเบียนแพทย์/เจ้าหน้าที่ (ตาราง doctor) กรอกให้ครบแล้วกดตรวจซ้ำ",
       };
     } catch (error) {
-      return unavailableOutcome(ID, "ตรวจสอบโครงสร้างตาราง doctor / provider_type / doctor_position", error);
+      return unavailableOutcome(ID, "ตรวจสอบโครงสร้างตาราง doctor / provider_type", error);
     }
   },
 };

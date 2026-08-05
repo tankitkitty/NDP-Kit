@@ -1,6 +1,6 @@
 import { selectOnly } from "../readonly";
 import { tableColumns, pickCol } from "../schema";
-import { CheckDefinition, CheckOutcome, unavailableOutcome } from "../types";
+import { CheckDefinition, CheckOutcome, ROW_ALERT_KEY, ROW_WARN_KEY, unavailableOutcome } from "../types";
 
 const ID = "pttype-config";
 
@@ -69,6 +69,20 @@ const check: CheckDefinition = {
           )
         : [];
 
+      // สิทธิที่ยังไม่ได้ระบุเป็นลูกหนี้สิทธิ (paidst <> '02') ทั้งหมด ไม่ว่าจะตั้งส่งเบิกไว้หรือไม่
+      //
+      // แยกออกมาเป็นรายการของตัวเอง เพราะเป็นค่าที่ต้องไล่ดูทีละสิทธิว่าตั้งใจหรือลืม —
+      // สิทธิที่ตั้งส่งเบิกไว้แล้วแต่ paidst ไม่ใช่ 02 คือของที่ต้องแก้แน่ๆ ส่วนสิทธิที่ไม่ได้
+      // ส่งเบิก (เช่น ชำระเงินเอง) มี paidst เป็นอย่างอื่นได้ตามปกติ จึงเป็นแค่รายการให้ตรวจทาน
+      const paidstRows: any = cols.has("paidst")
+        ? await selectOnly(
+            `SELECT ${selectCols.join(", ")}
+             FROM pttype pt
+             WHERE ${useWhere} AND COALESCE(pt.paidst, '') <> '02'
+             ORDER BY pt.pttype`
+          )
+        : [];
+
       const columns = [
         { key: "pttype", label: "รหัสสิทธิ" },
         { key: "name", label: "ชื่อสิทธิ" },
@@ -77,12 +91,38 @@ const check: CheckDefinition = {
         ...(priceGroupCol ? [{ key: "pttype_price_group_id", label: "price group (1=OFC/LGO, 2=UC/WEL)" }] : []),
       ];
 
+      // สิทธิที่ตั้งส่งเบิกไว้แล้วแต่ paidst ไม่ใช่ 02 = ผิดแน่ๆ (แถวแดง)
+      // ที่เหลือคือให้ไปตรวจทานว่าตั้งใจหรือลืม (แถวเหลือง)
+      const gradedPaidst = paidstRows.map((r: any) => {
+        const mustFix = String(r.export_eclaim || "") === "Y";
+        return {
+          ...r,
+          verdict: mustFix
+            ? `paidst = "${r.paidst || "ว่าง"}" ทั้งที่ตั้งส่งเบิกไว้ ต้องแก้เป็น 02`
+            : `paidst = "${r.paidst || "ว่าง"}" (สิทธินี้ไม่ได้ตั้งส่งเบิก ตรวจทานว่าตั้งใจหรือไม่)`,
+          [ROW_ALERT_KEY]: mustFix,
+          [ROW_WARN_KEY]: !mustFix,
+        };
+      });
+      const paidstMustFix = gradedPaidst.filter((r: any) => r[ROW_ALERT_KEY]).length;
+
       const sections = [];
       if (badRows.length > 0) {
         sections.push({
           title: "สิทธิที่ส่งเบิกแต่ตั้งค่าไม่ครบ",
           columns,
           rows: badRows,
+        });
+      }
+      if (gradedPaidst.length > 0) {
+        sections.push({
+          title: `สิทธิที่ยังไม่ได้ระบุเป็นลูกหนี้สิทธิ — paidst ไม่ใช่ '02' (${gradedPaidst.length} สิทธิ)`,
+          columns: [...columns, { key: "verdict", label: "ผลตรวจ" }],
+          rows: gradedPaidst,
+          note:
+            paidstMustFix > 0
+              ? `แถวสีแดง ${paidstMustFix} สิทธิคือสิทธิที่ตั้ง export_eclaim='Y' ไว้แล้ว ต้องแก้ paidst เป็น 02 ไม่งั้นส่งเบิกไม่ผ่าน`
+              : "ทั้งหมดเป็นสิทธิที่ไม่ได้ตั้งส่งเบิก ถ้าตั้งใจให้เป็นสิทธิชำระเงินเองก็ปล่อยไว้ได้",
         });
       }
       if (notExported.length > 0) {
@@ -98,9 +138,12 @@ const check: CheckDefinition = {
         status: badRows.length === 0 ? "pass" : "issues",
         problemCount: badRows.length,
         summary:
-          badRows.length === 0
+          (badRows.length === 0
             ? `สิทธิที่ส่งเบิกตั้งค่าครบทุกตัว${notExported.length ? ` (มี ${notExported.length} สิทธิที่ไม่ได้ตั้งส่งเบิก — ทบทวนในรายละเอียด)` : ""}`
-            : `พบ ${badRows.length} สิทธิที่ตั้งค่าไม่ครบสำหรับการส่งเบิก`,
+            : `พบ ${badRows.length} สิทธิที่ตั้งค่าไม่ครบสำหรับการส่งเบิก`) +
+          (gradedPaidst.length > 0
+            ? ` — และมี ${gradedPaidst.length} สิทธิที่ paidst ไม่ใช่ 02 (ยังไม่ได้ระบุเป็นลูกหนี้สิทธิ)`
+            : ""),
         sections,
         advice:
           "สิทธิที่จะส่งเบิกผ่าน eClaim/NDP ต้องตั้ง noexpire='Y' (ไม่หมดอายุ), export_eclaim='Y' (ส่งออก eClaim), " +

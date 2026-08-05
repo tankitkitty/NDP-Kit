@@ -585,7 +585,7 @@ a.version-check-new:hover {
 }
 
 .status-message.status-error {
-  background: #fef2f2;
+  background: #fee2e2;
   border-color: #fecaca;
   color: #b91c1c;
 }
@@ -646,11 +646,11 @@ a.version-check-new:hover {
    ทุกคลาสต้องเขียนทับ :nth-child(2n) ด้วย ไม่งั้นแถวคู่จะกลบสีจนหาไม่เจอ */
 .data-table tbody tr.row-alert,
 .data-table tbody tr.row-alert:nth-child(2n) {
-  background: #fef2f2;
+  background: #fee2e2;
 }
 
 .data-table tbody tr.row-alert:hover {
-  background: #fee2e2;
+  background: #fecaca;
 }
 
 .data-table tbody tr.row-alert td {
@@ -705,7 +705,7 @@ a.version-check-new:hover {
 }
 
 .state-alert {
-  background: #fef2f2;
+  background: #fee2e2;
   border-color: #fecaca;
 }
 
@@ -729,7 +729,7 @@ a.version-check-new:hover {
 }
 
 .status-pill.status-n {
-  background: #fef2f2;
+  background: #fee2e2;
   color: #b91c1c;
 }
 
@@ -881,7 +881,7 @@ a.version-check-new:hover {
 }
 
 .tab-badge-alert {
-  background: #fee2e2;
+  background: #fecaca;
   color: #b91c1c;
 }
 
@@ -926,7 +926,7 @@ a.version-check-new:hover {
   margin: 0 0 10px;
   padding: 8px 12px;
   border-left: 3px solid #fca5a5;
-  background: #fef2f2;
+  background: #fee2e2;
   border-radius: 4px;
   font-size: 0.88rem;
   line-height: 1.7;
@@ -959,7 +959,7 @@ a.version-check-new:hover {
 }
 
 .subtab-fail {
-  background: #fef2f2;
+  background: #fee2e2;
   border-color: #fecaca;
   color: #b91c1c;
 }
@@ -1108,7 +1108,7 @@ a.version-check-new:hover {
 }
 
 .precheck-card.state-alert {
-  background: #fef2f2;
+  background: #fee2e2;
   border-color: #fecaca;
 }
 
