@@ -155,7 +155,23 @@ export function isNewer(candidate: string, current: string): boolean {
   return false;
 }
 
-export async function fetchLatestVersion(): Promise<string> {
+/**
+ * ผลการถาม GitHub ครั้งล่าสุด เก็บไว้กันถามซ้ำถี่เกินจำเป็น
+ *
+ * แถบเมนูด้านซ้ายแสดงสถานะเวอร์ชันอยู่ทุกหน้า ถ้าถาม GitHub ใหม่ทุกครั้งที่ผู้ใช้
+ * เปลี่ยนหน้า จะชนเพดาน 60 ครั้งต่อชั่วโมงของผู้ใช้ที่ไม่ได้ล็อกอิน แล้ว GitHub จะ
+ * ตอบ 403 ทำให้ขึ้นข้อความผิดพลาดทั้งที่ไม่มีอะไรเสีย
+ *
+ * ห้าองศานาทีถือว่าใหม่พอสำหรับการแจ้งว่ามีเวอร์ชันใหม่ ส่วนตอนกดปุ่มตรวจเองหรือ
+ * กดอัปเดตจริงจะข้ามค่าที่พักไว้เสมอ (force) เพราะผู้ใช้ต้องการคำตอบสดตรงนั้น
+ */
+let cachedTag = "";
+let cachedAt = 0;
+const TAG_CACHE_MS = 5 * 60 * 1000;
+
+export async function fetchLatestVersion(force = false): Promise<string> {
+  if (!force && cachedTag && Date.now() - cachedAt < TAG_CACHE_MS) return cachedTag;
+
   const res = await fetch(LATEST_API, {
     headers: {
       Accept: "application/vnd.github+json",
@@ -176,6 +192,8 @@ export async function fetchLatestVersion(): Promise<string> {
   const data: any = await res.json();
   const tag = String(data?.tag_name || "").trim();
   if (!tag) throw new Error("ไม่พบเลขเวอร์ชันในข้อมูลที่ GitHub ส่งกลับมา");
+  cachedTag = tag;
+  cachedAt = Date.now();
   return tag;
 }
 

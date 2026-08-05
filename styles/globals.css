@@ -187,6 +187,63 @@ button {
   font-size: 0.85rem;
 }
 
+/* สถานะเวอร์ชันในแถบซ้าย เห็นได้ทุกหน้าโดยไม่ต้องกลับไปหน้าแรก
+   ตัวหนังสือเล็กและสีจางกว่าเมนู เพราะเป็นข้อมูลประกอบ ไม่ใช่สิ่งที่ต้องกดทุกวัน */
+.version-check {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 4px;
+}
+
+.version-check-status {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+/* มีของใหม่ต้องสะดุดตากว่าสถานะปกติชัดเจน ไม่งั้นจะกลืนไปกับข้อความอื่น */
+.version-check-new {
+  color: #fbbf24;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+a.version-check-new:hover {
+  text-decoration: underline;
+}
+
+.version-check-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  color: var(--sidebar-text);
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.version-check-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.version-check-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.version-check-btn svg {
+  flex-shrink: 0;
+}
+
 .sidebar-footer .user-pill {
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.1);

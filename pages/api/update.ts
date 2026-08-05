@@ -39,7 +39,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ supported: false, current });
     }
     try {
-      const latest = await fetchLatestVersion();
+      // ?force=1 มาจากปุ่มตรวจสอบเวอร์ชันที่ผู้ใช้กดเอง ต้องได้คำตอบสดไม่ใช่ของที่พักไว้
+      const latest = await fetchLatestVersion(req.query.force !== undefined);
       return res.status(200).json({
         supported: true,
         current,
@@ -65,7 +66,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // ตั้งแต่ตอนนี้ ดีกว่าปล่อยให้เริ่มแล้วไปตายกลางทาง
     let target: string;
     try {
-      target = await fetchLatestVersion();
+      // กำลังจะดาวน์โหลดจริง ต้องถามสดเสมอ ไม่ใช้ค่าที่พักไว้
+      target = await fetchLatestVersion(true);
     } catch (error: any) {
       return res.status(502).json({
         error: `ตรวจสอบเวอร์ชันใหม่ไม่สำเร็จ: ${error?.message || "เชื่อมต่อ GitHub ไม่ได้"}`,

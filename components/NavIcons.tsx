@@ -107,6 +107,16 @@ export function DatabaseIcon(props: IconProps) {
   );
 }
 
+/** ตรวจสอบเวอร์ชัน — ลูกศรวนรอบ */
+export function RefreshIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+      <path d="M20 4v4.5h-4.5" />
+    </Svg>
+  );
+}
+
 /** ออกจากระบบ */
 export function LogoutIcon(props: IconProps) {
   return (

@@ -3,6 +3,7 @@ import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import Logo from "./Logo";
+import VersionCheck from "./VersionCheck";
 import {
   ChecklistIcon,
   DatabaseIcon,
@@ -91,6 +92,7 @@ export default function Layout({ title, loginname, hospitalName, fullWidth, chil
           </nav>
         ) : null}
         <div className="sidebar-footer">
+          {loginname ? <VersionCheck /> : null}
           {hospitalName ? <span className="user-pill">{hospitalName}</span> : null}
           {loginname ? (
             <>
