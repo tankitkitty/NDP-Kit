@@ -60,17 +60,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    // ต้องรู้เลขเวอร์ชันก่อนเริ่ม เพราะ URL ของแพ็กเกจผูกกับเลขเวอร์ชัน (ดู
+    // assetUrlForTag ว่าทำไมถึงใช้ URL กลางไม่ได้) ถ้าถาม GitHub ไม่ได้ก็บอกไปเลย
+    // ตั้งแต่ตอนนี้ ดีกว่าปล่อยให้เริ่มแล้วไปตายกลางทาง
+    let target: string;
+    try {
+      target = await fetchLatestVersion();
+    } catch (error: any) {
+      return res.status(502).json({
+        error: `ตรวจสอบเวอร์ชันใหม่ไม่สำเร็จ: ${error?.message || "เชื่อมต่อ GitHub ไม่ได้"}`,
+      });
+    }
+
     clearUpdateStage();
 
     // ดาวน์โหลดและแตกไฟล์ด้วยตัวโปรแกรมเอง แล้วตอบกลับทันทีไม่ให้ผู้ใช้ค้างรอ
     // ความคืบหน้าและความผิดพลาดทั้งหมดรายงานผ่านไฟล์สถานะที่หน้าเว็บถามเป็นระยะ
-    void stageUpdate()
+    void stageUpdate(target)
       .then(() => restartIntoNewVersion(root))
       .catch(() => {
         // stageUpdate บันทึกสาเหตุไว้ให้แล้ว ไม่ต้องทำอะไรเพิ่ม
       });
 
-    return res.status(200).json({ message: "เริ่มอัปเดตแล้ว" });
+    return res.status(200).json({ message: "เริ่มอัปเดตแล้ว", target });
   }
 
   res.setHeader("Allow", ["GET", "POST"]);

@@ -4,7 +4,22 @@ import AdmZip from "adm-zip";
 
 const REPO = "tankitkitty/NDP-Kit";
 const LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`;
-export const ASSET_URL = `https://github.com/${REPO}/releases/latest/download/ndp-kit.zip`;
+
+/**
+ * URL ของแพ็กเกจ โดยระบุเลขเวอร์ชันลงไปในที่อยู่ตรงๆ
+ *
+ * ห้ามใช้ releases/latest/download/... ซึ่งเป็น URL เดียวตายตัวสำหรับทุกเวอร์ชัน
+ * เพราะแคชระหว่างทางจะคืนไฟล์เวอร์ชันเก่าที่เคยโหลดผ่าน URL เดียวกันนี้มาก่อน
+ * เกิดขึ้นจริงแล้วเมื่อ 5 ส.ค. 2569: เครื่องติดตั้ง v2.0.7 ตอน 10:06 พอกดอัปเดต
+ * เป็น v2.0.8 ตอน 10:37 กลับได้ไฟล์ v2.0.7 ตัวเดิมกลับมา ทั้งที่ v2.0.8 ขึ้นแล้ว
+ * ตั้งแต่ 10:36 การสลับไฟล์ "สำเร็จ" แต่เวอร์ชันไม่ขยับ และไม่มีอะไรฟ้องเลย
+ *
+ * หัวขอ Cache-Control: no-cache ไม่พอ เพราะคุมได้แค่ฝั่งเรา ไม่ได้บังคับ proxy
+ * หรือ CDN ปลายทาง ส่วน URL ที่ผูกกับเลขเวอร์ชันจะไม่มีทางชนของเก่าตั้งแต่แรก
+ */
+export function assetUrlForTag(tag: string): string {
+  return `https://github.com/${REPO}/releases/download/${encodeURIComponent(tag)}/ndp-kit.zip`;
+}
 
 /**
  * โปรแกรมถูกติดตั้งโดยตัวช่วยติดตั้งไว้แบบนี้
@@ -174,9 +189,10 @@ export async function fetchLatestVersion(): Promise<string> {
  * ถูกล็อกโดย Windows ทับไม่ได้ การสลับจริงเกิดตอนเปิดโปรแกรมครั้งถัดไป ซึ่ง
  * start.cmd เป็นคนทำให้ (ดู install/ndp-kit-setup.ps1)
  */
-export async function stageUpdate(): Promise<void> {
+export async function stageUpdate(tag: string): Promise<void> {
   const root = getInstallRoot();
   if (!root) throw new Error("เครื่องนี้ไม่ได้ติดตั้งผ่านตัวช่วยติดตั้ง");
+  if (!tag) throw new Error("ไม่รู้ว่าจะอัปเดตเป็นเวอร์ชันอะไร");
 
   const zipPath = path.join(root, "update.zip");
   const stageDir = path.join(root, "app.new");
@@ -184,7 +200,7 @@ export async function stageUpdate(): Promise<void> {
   try {
     writeUpdateStage("downloading");
 
-    const res = await fetch(ASSET_URL, {
+    const res = await fetch(assetUrlForTag(tag), {
       headers: { "User-Agent": "ndp-kit-updater", "Cache-Control": "no-cache" },
       signal: AbortSignal.timeout(600000),
     });
@@ -205,6 +221,19 @@ export async function stageUpdate(): Promise<void> {
 
     if (!fs.existsSync(path.join(stageDir, "server.js"))) {
       throw new Error("ไฟล์ที่ดาวน์โหลดมาไม่สมบูรณ์ (ไม่พบ server.js)");
+    }
+
+    // ตรวจว่าได้เวอร์ชันที่ขอมาจริง ไม่ใช่ของเก่าจากแคชระหว่างทาง
+    //
+    // ถ้าไม่ตรวจตรงนี้ การอัปเดตจะ "สำเร็จ" ทุกขั้นตอนแต่เวอร์ชันไม่ขยับ แล้วหน้าเว็บ
+    // จะรอเวอร์ชันใหม่ที่ไม่มีวันมาถึงจนค้างไปเรื่อยๆ โดยไม่มีอะไรบอกสาเหตุ
+    const versionFile = path.join(stageDir, "version.txt");
+    const got = fs.existsSync(versionFile) ? fs.readFileSync(versionFile, "utf-8").trim() : "";
+    if (got !== tag) {
+      throw new Error(
+        `ไฟล์ที่ได้มาเป็นเวอร์ชัน ${got || "ที่ระบุไม่ได้"} ไม่ใช่ ${tag} ` +
+          `อาจถูกแคชของเครือข่ายคืนไฟล์เก่ากลับมา กรุณาลองใหม่อีกครั้ง`
+      );
     }
 
     fs.rmSync(zipPath, { force: true });

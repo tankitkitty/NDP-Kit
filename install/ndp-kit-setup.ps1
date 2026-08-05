@@ -14,8 +14,11 @@ $INSTALL_DIR  = 'C:\NDP-Kit'
 # ชื่อโฟลเดอร์เดิมก่อนเปลี่ยนมาใช้ขีดกลาง เครื่องที่ติดตั้งไว้ก่อนหน้านี้จะถูกย้ายมา
 # ให้อัตโนมัติตอนกดเมนู 1 (ดู Move-OldInstall) จะได้ไม่เกิดสองชุดแย่งพอร์ตกัน
 $OLD_INSTALL_DIR = 'C:\NDPKit'
-$APP_URL      = 'https://github.com/tankitkitty/NDP-Kit/releases/latest/download/ndp-kit.zip'
+$REPO         = 'tankitkitty/NDP-Kit'
+$LATEST_API   = "https://api.github.com/repos/$REPO/releases/latest"
 $APP_ZIP_NAME = 'ndp-kit.zip'
+# ที่อยู่สำรอง ใช้เมื่อถาม API ไม่ได้เท่านั้น (ดูเหตุผลที่ Invoke-Install)
+$APP_URL      = "https://github.com/$REPO/releases/latest/download/$APP_ZIP_NAME"
 $NODE_VER     = 'v24.19.0'
 $NODE_ZIP     = "node-$NODE_VER-win-x64.zip"
 $NODE_URL     = "https://nodejs.org/dist/$NODE_VER/$NODE_ZIP"
@@ -269,7 +272,24 @@ function Invoke-Install {
     try { Remove-Item $stale -Force; Ok 'ลบไฟล์เก่าเรียบร้อย' } catch { Warn 'ลบไม่สำเร็จ - ลบเองได้ ไฟล์นี้ไม่ถูกใช้แล้ว' }
   }
 
-  if (-not (Get-RemoteFile $APP_URL $zip 'ตัวโปรแกรมเวอร์ชันล่าสุด')) {
+  # ถามเลขเวอร์ชันล่าสุดก่อน แล้วโหลดจาก URL ที่ระบุเลขเวอร์ชันลงไปตรงๆ
+  #
+  # URL กลาง releases/latest/download/... ใช้ที่อยู่เดียวกันทุกเวอร์ชัน แคชระหว่างทาง
+  # จึงคืนไฟล์เก่าที่เคยโหลดผ่านที่อยู่เดียวกันนี้มาก่อนได้ เกิดขึ้นจริงแล้วเมื่อ
+  # 5 ส.ค. 2569 ตอนอัปเดตจากหน้าเว็บ กดแล้วได้ไฟล์เวอร์ชันเดิมกลับมาโดยไม่มีอะไรฟ้อง
+  # ถ้าถาม API ไม่ได้ก็ถอยไปใช้ URL กลางเหมือนเดิม ดีกว่าติดตั้งไม่ได้เลย
+  $url = $APP_URL
+  try {
+    $rel = Invoke-RestMethod $LATEST_API -TimeoutSec 30 -Headers @{ 'User-Agent' = 'ndp-kit-setup' }
+    if ($rel.tag_name) {
+      $url = "https://github.com/$REPO/releases/download/$($rel.tag_name)/$APP_ZIP_NAME"
+      Step "  เวอร์ชันล่าสุดคือ $($rel.tag_name)"
+    }
+  } catch {
+    Warn 'ถามเลขเวอร์ชันล่าสุดไม่ได้ - จะโหลดจากที่อยู่กลางแทน'
+  }
+
+  if (-not (Get-RemoteFile $url $zip 'ตัวโปรแกรมเวอร์ชันล่าสุด')) {
     Step ''
     Step 'ตรวจสอบว่าเครื่องนี้เข้าอินเทอร์เน็ตได้ และเปิดเข้า github.com ได้'
     Step 'แล้วลองใหม่อีกครั้ง'
