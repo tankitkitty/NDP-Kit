@@ -4,11 +4,26 @@ import { query } from "../../lib/db";
 import { createSessionValue, SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from "../../lib/session";
 import { markSetupComplete } from "../../lib/setupToken";
 
-// จำกัดการลองเข้าสู่ระบบต่อ IP เพื่อกันการเดารหัสผ่านแบบ brute force
-// เก็บในหน่วยความจำ (เหมาะกับแอปแบบ instance เดียวที่ติดตั้งในหน่วยบริการ)
+/**
+ * จำกัดการลองเข้าสู่ระบบต่อ IP เพื่อกันการเดารหัสผ่านแบบ brute force
+ *
+ * กติกา: ใส่ผิดครบ 10 ครั้ง (ภายในช่วงนับ 15 นาที) แล้วห้ามลองอีก 15 นาที
+ * นับจาก "ครั้งที่ผิดครั้งสุดท้าย" ไม่ใช่ครั้งแรก
+ *
+ * เดิมนับถอยหลังจากครั้งแรกที่ผิด ซึ่งกลายเป็นว่าถ้าคนร้ายค่อยๆ ยิงให้ครบ 10 ครั้ง
+ * ตอนท้ายของช่วง 15 นาที จะโดนห้ามแค่ไม่กี่วินาทีแล้วเริ่มยิงรอบใหม่ได้เลย
+ *
+ * เก็บในหน่วยความจำ (เหมาะกับแอปแบบ instance เดียวที่ติดตั้งในหน่วยบริการ)
+ * รีสตาร์ทโปรแกรมแล้วตัวนับหายไปด้วย ซึ่งรับได้เพราะการรีสตาร์ทต้องเข้าถึงตัวเครื่อง
+ */
 const MAX_FAILED_ATTEMPTS = 10;
+/** ช่วงเวลาที่นับสะสมจำนวนครั้งที่ผิด */
 const WINDOW_MS = 15 * 60 * 1000;
-const failedAttempts = new Map<string, { count: number; firstAt: number }>();
+/** ระยะเวลาห้ามลองใหม่ หลังผิดครบตามจำนวน */
+const BAN_MS = 15 * 60 * 1000;
+
+type AttemptRecord = { count: number; firstAt: number; blockedUntil: number };
+const failedAttempts = new Map<string, AttemptRecord>();
 
 /**
  * IP ของผู้เรียก ใช้เป็นกุญแจของตัวนับการล็อกอินผิด
@@ -28,19 +43,28 @@ function getClientIp(req: NextApiRequest): string {
   return req.socket?.remoteAddress || "unknown";
 }
 
+/** ล้างของเก่าที่หมดอายุทั้งช่วงนับและช่วงห้าม เพื่อไม่ให้ map โตไม่หยุด */
 function pruneExpired(now: number) {
   if (failedAttempts.size < 500) return;
   for (const [key, rec] of failedAttempts) {
-    if (now - rec.firstAt > WINDOW_MS) failedAttempts.delete(key);
+    if (now >= rec.blockedUntil && now - rec.firstAt > WINDOW_MS) failedAttempts.delete(key);
   }
 }
 
 function checkRateLimit(ip: string): { limited: boolean; retryAfterSec: number } {
   const now = Date.now();
   const rec = failedAttempts.get(ip);
-  if (!rec || now - rec.firstAt > WINDOW_MS) return { limited: false, retryAfterSec: 0 };
-  if (rec.count >= MAX_FAILED_ATTEMPTS) {
-    return { limited: true, retryAfterSec: Math.ceil((WINDOW_MS - (now - rec.firstAt)) / 1000) };
+  if (!rec) return { limited: false, retryAfterSec: 0 };
+
+  if (now < rec.blockedUntil) {
+    return { limited: true, retryAfterSec: Math.ceil((rec.blockedUntil - now) / 1000) };
+  }
+
+  // พ้นกำหนดห้ามแล้ว หรือช่วงนับหมดอายุไปเฉยๆ — เริ่มนับใหม่ให้ครบ 10 ครั้งอีกรอบ
+  // ไม่งั้นพอครบกำหนด ใส่ผิดครั้งเดียวจะโดนห้ามอีก 15 นาทีทันที ซึ่งคนที่จำรหัสผ่าน
+  // ไม่ได้จริงๆ จะเข้าไม่ได้ทั้งวัน
+  if (rec.blockedUntil > 0 || now - rec.firstAt > WINDOW_MS) {
+    failedAttempts.delete(ip);
   }
   return { limited: false, retryAfterSec: 0 };
 }
@@ -49,10 +73,16 @@ function recordFailure(ip: string) {
   const now = Date.now();
   pruneExpired(now);
   const rec = failedAttempts.get(ip);
+
   if (!rec || now - rec.firstAt > WINDOW_MS) {
-    failedAttempts.set(ip, { count: 1, firstAt: now });
-  } else {
-    rec.count += 1;
+    failedAttempts.set(ip, { count: 1, firstAt: now, blockedUntil: 0 });
+    return;
+  }
+
+  rec.count += 1;
+  if (rec.count >= MAX_FAILED_ATTEMPTS) {
+    // ครบโควตาแล้ว เริ่มจับเวลาห้าม 15 นาทีจากครั้งนี้
+    rec.blockedUntil = now + BAN_MS;
   }
 }
 
@@ -89,10 +119,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const rateLimit = checkRateLimit(ip);
   if (rateLimit.limited) {
     res.setHeader("Retry-After", String(rateLimit.retryAfterSec));
-    const minutes = Math.ceil(rateLimit.retryAfterSec / 60);
-    return res
-      .status(429)
-      .json({ error: `พยายามเข้าสู่ระบบผิดพลาดหลายครั้งเกินไป กรุณาลองใหม่อีกครั้งใน ${minutes} นาที` });
+    // บอกเวลาที่เหลือจริง ถ้าน้อยกว่า 1 นาทีให้บอกเป็นวินาที ไม่งั้นจะขึ้นว่า
+    // "อีก 1 นาที" ค้างอยู่นานจนดูเหมือนเวลาไม่เดิน
+    const remain =
+      rateLimit.retryAfterSec >= 60
+        ? `${Math.ceil(rateLimit.retryAfterSec / 60)} นาที`
+        : `${rateLimit.retryAfterSec} วินาที`;
+    return res.status(429).json({
+      error: `ใส่รหัสผ่านผิดครบ ${MAX_FAILED_ATTEMPTS} ครั้ง ระบบระงับการเข้าสู่ระบบชั่วคราว กรุณาลองใหม่อีกครั้งใน ${remain}`,
+    });
   }
 
   const loginname = typeof req.body?.loginname === "string" ? req.body.loginname.trim() : "";
@@ -133,7 +168,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `${SESSION_COOKIE_NAME}=${sessionValue}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE_SECONDS}${secureFlag}`
     );
     return res.status(200).json({ message: "เข้าสู่ระบบสำเร็จ" });
-  } catch (error) {
-    return res.status(500).json({ error: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ" });
+  } catch (error: any) {
+    // เขียนสาเหตุจริงลง log เสมอ (ตัวช่วยติดตั้งเก็บไว้ที่ logs\app.log ดูได้จากเมนู 3)
+    //
+    // เดิมกลืน error ทิ้งทั้งหมด เหลือแต่ข้อความกว้างๆ บนหน้าจอ เวลาหน่วยบริการโทรมาว่า
+    // "ล็อกอินไม่ได้" จึงไม่มีอะไรให้ไล่เลยว่าเป็นเพราะฐานล่ม รหัสผ่านฐานเปลี่ยน
+    // ตาราง officer ไม่มี หรือ request เพี้ยน — ต้องไปนั่งเดาทีละอย่าง
+    //
+    // ไม่พิมพ์ชื่อผู้ใช้/รหัสผ่านลง log เด็ดขาด เก็บแค่ชนิดของความผิดพลาด
+    console.error(
+      `[login] ${new Date().toISOString()} ล็อกอินล้มเหลว: ${error?.code || "ไม่ระบุรหัส"} - ${error?.message || error}`
+    );
+
+    // ฐานข้อมูลตอบว่าเทียบ collation ไม่ได้ = ชื่อผู้ใช้ที่ส่งมามีอักขระที่คอลัมน์
+    // เก็บไม่ได้ (เช่น emoji ในฐานที่คอลัมน์เป็น tis620) แปลว่าไม่มีทางตรงกับบัญชีใด
+    // ถือเป็นรหัสผ่านผิดตามปกติ จะได้นับรวมในโควตา 10 ครั้งด้วย
+    if (error?.code === "ER_CANT_AGGREGATE_2COLLATIONS") {
+      recordFailure(ip);
+      return res.status(401).json({ error: "Username หรือ Password ไม่ถูกต้อง" });
+    }
+
+    return res.status(500).json({
+      error: "เข้าสู่ระบบไม่สำเร็จเพราะติดต่อฐานข้อมูลไม่ได้ — ให้ผู้ดูแลระบบดูรายละเอียดที่ logs\\app.log",
+    });
   }
 }

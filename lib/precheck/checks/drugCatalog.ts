@@ -60,7 +60,10 @@ const check: CheckDefinition = {
                 COALESCE(c.tmtid, '') AS tmtid,
                 d.unitprice AS drugitem_price,
                 c.unitprice AS drugcat_price,
-                c.dateeffective
+                -- จัดรูปแบบวันที่ตั้งแต่ใน SQL ให้เป็น YYYY-MM-DD เหมือนคอลัมน์วันที่
+                -- อื่นๆ ในหน้านี้ ถ้าปล่อยเป็นชนิด date ตัวขับจะส่งกลับมาเป็น Date object
+                -- แล้วกลายเป็น "Fri Aug 30" ตอนแปลงเป็นข้อความ ซึ่งอ่านยากและเรียงไม่ได้
+                DATE_FORMAT(c.dateeffective, '%Y-%m-%d') AS dateeffective
          FROM drugitems d
          INNER JOIN (
            SELECT t.hospdrugcode, t.tmtid, t.unitprice, t.dateeffective
@@ -94,7 +97,7 @@ const check: CheckDefinition = {
           tmtid: r.tmtid,
           drugitem_price: r.drugitem_price,
           drugcat_price: r.drugcat_price,
-          dateeffective: r.dateeffective ? String(r.dateeffective).slice(0, 10) : "",
+          dateeffective: r.dateeffective || "",
           verdict: problems.length > 0 ? problems.join(" + ") : OK_MARK,
           [ROW_ALERT_KEY]: problems.length > 0,
         };
