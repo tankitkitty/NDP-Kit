@@ -22,7 +22,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "หน้าแรก" },
   { href: "/import-43file", label: "นำเข้า 43 แฟ้ม" },
   { href: "/eclaim-fee-schedule", label: "eClaim Fee Schedule" },
-  { href: "/eligibility-check", label: "ตรวจสอบสิทธิ" },
+  // ปิดเมนูตรวจสอบสิทธิไว้ก่อน ตัวหน้าและ API ยังอยู่ครบ เข้าถึงได้ทาง URL ตรงๆ
+  // ถ้าจะเปิดใช้อีกครั้ง เอาบรรทัดล่างนี้กลับมา
+  // { href: "/eligibility-check", label: "ตรวจสอบสิทธิ" },
   { href: "/ndp-precheck", label: "ตรวจก่อนส่งเคลม NDP" },
   { href: "/setup-checklist", label: "Checklist ตั้งค่า" },
   { href: "/settings", label: "ตั้งค่าการเชื่อมต่อ" },
