@@ -294,6 +294,20 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
       }
     }
 
+    /**
+     * คอลัมน์ไหนควรให้ข้อความขึ้นบรรทัดใหม่ได้
+     *
+     * ตัดสินทั้งคอลัมน์ ไม่ใช่ทีละช่อง เพื่อให้ความกว้างของคอลัมน์คงที่ทุกแถว
+     * คอลัมน์สั้นๆ อย่างรหัส ราคา วันที่ ปล่อยให้อยู่บรรทัดเดียว จะได้ไม่ถูกบีบ
+     * จนขึ้นบรรทัดใหม่โดยไม่จำเป็น เหลือแต่คอลัมน์ข้อความยาว (ชื่อยา ชื่อคน ผลตรวจ)
+     * ที่ยอมให้ตัดบรรทัด
+     */
+    const wrapCols = new Set(
+      section.columns
+        .filter((c) => section.rows.some((r) => String(r[c.key] ?? "").length > 28))
+        .map((c) => c.key)
+    );
+
     // ชื่อไฟล์เอาชื่อหัวข้อการ์ดนำหน้า จะได้รู้ว่าไฟล์ไหนมาจากการตรวจอะไรตอนเปิดทีหลัง
     const cardTitle = QUERY_CARDS.find((c) => c.id === cardId)?.title || cardId;
     const exportName = `${cardTitle}${section.title ? ` - ${section.title}` : ""}`;
@@ -348,7 +362,9 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
         ) : null}
 
         {shown.length > 0 ? (
-          <div className="table-wrap" style={{ maxHeight: 360, overflowY: "auto" }}>
+          // สูง 480px ไม่ใช่ 360px แบบเดิม เพราะแถวที่มีข้อความยาวสูงกว่าหนึ่งบรรทัด
+          // ของเดิมจึงเห็นได้แค่สามสี่แถวแล้วต้องเลื่อนตลอด
+          <div className="table-wrap" style={{ maxHeight: 480, overflowY: "auto" }}>
             <table className="data-table">
               <thead>
                 <tr>
@@ -368,7 +384,7 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
                     }
                   >
                     {section.columns.map((c) => (
-                      <td key={c.key} className="wrap">
+                      <td key={c.key} className={wrapCols.has(c.key) ? "wrap" : undefined}>
                         {row[c.key] === null || row[c.key] === undefined || row[c.key] === "" ? (
                           <span style={{ color: "var(--muted)" }}>-</span>
                         ) : (

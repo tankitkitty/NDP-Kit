@@ -604,8 +604,13 @@ a.version-check-new:hover {
   background: #fff;
 }
 
+/* กว้างตามเนื้อหาจริง แต่ไม่แคบกว่ากรอบ
+   เดิมตั้ง width:100% ตายตัว ตารางจึงถูกบีบให้พอดีกรอบเสมอ คอลัมน์ที่มีข้อความยาว
+   (เช่นชื่อยา) ถูกบีบจนขึ้นบรรทัดใหม่หกเจ็ดบรรทัด ขณะที่คอลัมน์ตัวเลขเหลือที่ว่างเพียบ
+   ปล่อยให้กว้างตามเนื้อหาแล้วเลื่อนแนวนอนเอาอ่านง่ายกว่ามาก */
 .data-table {
-  width: 100%;
+  width: auto;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
 }
@@ -618,8 +623,12 @@ a.version-check-new:hover {
   white-space: nowrap;
 }
 
+/* คอลัมน์ข้อความยาวเท่านั้นที่ให้ขึ้นบรรทัดใหม่ และจำกัดความกว้างไว้ ไม่ให้ชื่อยาว
+   ตัวเดียวดันตารางจนคอลัมน์อื่นหลุดจอ */
 .data-table td.wrap {
   white-space: normal;
+  max-width: 340px;
+  word-break: break-word;
 }
 
 .data-table th {
@@ -628,6 +637,16 @@ a.version-check-new:hover {
   font-weight: 600;
   font-size: 0.82rem;
   border-bottom: 1px solid var(--border);
+}
+
+/* หัวตารางลอยค้างไว้ตอนเลื่อนดูแถวล่างๆ ในกรอบที่จำกัดความสูง
+   ไม่งั้นพอเลื่อนลงไปสิบแถวก็จำไม่ได้แล้วว่าคอลัมน์ไหนคืออะไร
+   ตรึงเฉพาะแถวแรกของหัวตาราง เพราะหน้า eClaim Fee Schedule มีหัวตารางสองแถว
+   (แถวชื่อคอลัมน์กับแถวช่องกรอง) ถ้าตรึงทั้งคู่ที่ top:0 จะทับกันเอง */
+.data-table thead tr:first-child th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .data-table tbody tr:nth-child(even) {
