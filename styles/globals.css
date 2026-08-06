@@ -466,15 +466,139 @@ a.version-check-new:hover {
   padding: 18px;
 }
 
+/* หัวหน้ารายงาน: ชื่อเรื่องซ้าย ปุ่มจัดการขวา
+   จอแคบให้ปุ่มตกลงมาอยู่ใต้ชื่อเรื่องและชิดซ้าย ไม่ให้บีบชื่อเรื่องจนตัดคำ */
+.reports-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 900px) {
+  .reports-header .toolbar {
+    justify-content: flex-start !important;
+  }
+}
+
+/* ---- รายการรายงานแบบกระชับ ----
+   หน่วยบริการที่ใช้จริงมีรายงานหลักร้อยใบ ถ้าใบละการ์ดจะเลื่อนหาไม่ไหว
+   จึงทำเป็นแถวบรรทัดเดียว สูงประมาณ 44px เห็นได้ราว 15 ใบต่อหนึ่งหน้าจอ */
+.report-group-head {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 12px;
+  margin-top: 14px;
+  border-radius: 6px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  font-weight: 700;
+  color: var(--text);
+  user-select: none;
+}
+
+.report-group-head::-webkit-details-marker {
+  display: none;
+}
+
+/* ลูกศรบอกสถานะพับ/กาง วาดเองเพราะซ่อน marker เดิมของเบราว์เซอร์ไปแล้ว */
+.report-group-head::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+details[open] > .report-group-head::before {
+  transform: rotate(90deg);
+}
+
+.report-rows {
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.report-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.report-row:last-child {
+  border-bottom: none;
+}
+
+.report-row:hover {
+  background: var(--surface-strong);
+}
+
+.report-row:focus-visible {
+  outline: 2px solid var(--button);
+  outline-offset: -2px;
+}
+
+/* ชื่อกับคำอธิบายอยู่บรรทัดเดียวกัน ตัดด้วย ... เมื่อยาวเกิน
+   เพื่อให้ทุกแถวสูงเท่ากัน กวาดตาอ่านเป็นคอลัมน์ได้ */
+.report-row-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.report-row-name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.report-row-desc {
+  color: var(--muted);
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.report-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ปุ่มในแถวต้องเล็กกว่าปุ่มปกติ ไม่งั้นแถวจะสูงจนแสดงได้ไม่กี่ใบ */
+.report-row-actions .button-ghost {
+  padding: 4px 10px;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 720px) {
+  /* จอแคบไม่มีที่พอให้คำอธิบาย ตัดทิ้งแล้วเหลือชื่อกับปุ่ม */
+  .report-row-desc {
+    display: none;
+  }
+}
+
 /* เลขลำดับรายงานในหมวด — วงกลมเล็กหน้าชื่อ ให้กวาดตาหาข้อที่ต้องการได้เร็ว */
 .report-no {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
-  height: 24px;
-  margin-right: 8px;
+  min-width: 26px;
+  height: 22px;
   padding: 0 6px;
+  flex-shrink: 0;
   border-radius: 999px;
   background: var(--surface-strong);
   border: 1px solid var(--border);
@@ -482,22 +606,6 @@ a.version-check-new:hover {
   font-size: 0.8rem;
   font-weight: 700;
   vertical-align: middle;
-}
-
-/* การ์ดรายงานกดได้ทั้งใบ — ต้องมีสัญญาณว่ากดได้ ไม่งั้นผู้ใช้จะไม่รู้แล้วไปเล็งปุ่มเล็กๆ แทน */
-.report-card {
-  cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
-}
-
-.report-card:hover {
-  border-color: var(--button);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
-}
-
-.report-card:focus-visible {
-  outline: 2px solid var(--button);
-  outline-offset: 2px;
 }
 
 .card-header {

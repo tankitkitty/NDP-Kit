@@ -1,5 +1,6 @@
 import { GetServerSideProps } from "next";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/router";
 import Layout from "../components/Layout";
 import { getHospitalName } from "../lib/db";
 import { getSession } from "../lib/session";
@@ -101,13 +102,29 @@ export default function ReportsPage({
   const [reports, setReports] = useState<ReportDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [selected, setSelected] = useState<ReportDefinition | null>(null);
+  /** ค่าพารามิเตอร์สำหรับ "ทดลองรัน" ตอนเขียนรายงานเท่านั้น — การรันจริงอยู่หน้า /reports/[id] */
   const [values, setValues] = useState<Record<string, string>>({});
   const [result, setResult] = useState<RunResult | null>(null);
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  /** หมวดที่ผู้ใช้พับเก็บไว้ — เก็บเป็น "พับ" ไม่ใช่ "เปิด" เพื่อให้หมวดใหม่เปิดมาเห็นเลย */
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const fileInput = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+
+  // กรองด้วยคำค้นก่อนจัดกลุ่ม เพื่อให้หมวดที่ไม่มีผลลัพธ์หายไปทั้งหมวด ไม่เหลือหัวข้อว่างๆ
+  const keyword = search.trim().toLowerCase();
+  const filtered = keyword
+    ? reports.filter((r) =>
+        [r.name, r.description, r.group].some((field) =>
+          String(field || "").toLowerCase().includes(keyword)
+        )
+      )
+    : reports;
+  const visibleGroups = groupReports(filtered);
+  const matchCount = filtered.length;
 
   useEffect(() => {
     void refresh();
@@ -126,15 +143,14 @@ export default function ReportsPage({
     }
   }
 
-  /** เปิดรายงานขึ้นมาเพื่อรัน — เติมค่าตั้งต้นของพารามิเตอร์ให้ด้วย */
+  /**
+   * เปิดรายงานไปรันที่หน้าของตัวเอง
+   *
+   * แยกหน้าเพราะผลลัพธ์บางรายงานยาวมาก ถ้าต่อท้ายอยู่ในหน้ารวมจะต้องเลื่อนผ่าน
+   * รายการรายงานทั้งหมดทุกครั้ง และได้ URL ประจำรายงานไปด้วย ส่งลิงก์ให้กันได้
+   */
   function openReport(report: ReportDefinition) {
-    setSelected(report);
-    setDraft(null);
-    setResult(null);
-    setError("");
-    const initial: Record<string, string> = {};
-    for (const p of report.params || []) initial[p.name] = p.defaultValue || "";
-    setValues(initial);
+    void router.push(`/reports/${encodeURIComponent(report.id)}`);
   }
 
   function editReport(report: ReportDefinition) {
@@ -146,9 +162,11 @@ export default function ReportsPage({
       sql: report.sql,
       params: report.params || [],
     });
-    setSelected(null);
     setResult(null);
     setError("");
+    const initial: Record<string, string> = {};
+    for (const p of report.params || []) initial[p.name] = p.defaultValue || "";
+    setValues(initial);
   }
 
   async function saveDraft() {
@@ -168,8 +186,8 @@ export default function ReportsPage({
       }
       setMessage(`บันทึกรายงาน "${data.report.name}" แล้ว`);
       setDraft(null);
+      setResult(null);
       await refresh();
-      openReport(data.report);
     } catch {
       setError("เรียก API ไม่สำเร็จ");
     }
@@ -178,24 +196,20 @@ export default function ReportsPage({
   async function removeReport(report: ReportDefinition) {
     if (!confirm(`ลบรายงาน "${report.name}" ใช่หรือไม่`)) return;
     await fetch(`/api/reports?id=${encodeURIComponent(report.id)}`, { method: "DELETE" });
-    if (selected?.id === report.id) setSelected(null);
+    if (draft?.id === report.id) setDraft(null);
     await refresh();
   }
 
-  /** รันได้ทั้งรายงานที่บันทึกแล้ว และร่างที่ยังไม่ได้บันทึก (ทดลองรัน) */
-  async function run(target: "saved" | "draft") {
+  /** ทดลองรันร่างที่ยังไม่ได้บันทึก — ใช้ตอนเขียนเท่านั้น การรันจริงอยู่หน้า /reports/[id] */
+  async function run() {
     setRunning(true);
     setError("");
     setResult(null);
     try {
-      const body =
-        target === "saved"
-          ? { id: selected?.id, values }
-          : { sql: draft?.sql, params: draft?.params, values };
       const res = await fetch("/api/reports/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ sql: draft?.sql, params: draft?.params, values }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -212,7 +226,7 @@ export default function ReportsPage({
 
   async function exportExcel() {
     if (!result || result.rows.length === 0) return;
-    const filename = selected?.name || draft?.name || "รายงาน";
+    const filename = draft?.name || "รายงาน";
     try {
       const res = await fetch("/api/precheck/export", {
         method: "POST",
@@ -268,14 +282,70 @@ export default function ReportsPage({
 
   return (
     <Layout title="รายงานที่เขียนเอง" loginname={loginname} hospitalName={hospitalName} fullWidth>
-      <h1 className="page-title" style={{ marginBottom: 6 }}>รายงานที่เขียนเอง</h1>
-      <p className="brand-subtitle" style={{ margin: "0 0 24px", maxWidth: 820, lineHeight: 1.6 }}>
-        เขียนคำสั่ง SELECT เพื่อดึงข้อมูลจากฐาน HOSxP มาแสดงเป็นตาราง ส่งออก Excel ได้
-        และส่งไฟล์รายงานให้หน่วยงานอื่นนำไปใช้ต่อได้
-      </p>
+      {/* หัวเรื่องซ้าย ปุ่มจัดการขวา — ปุ่มพวกนี้เป็นงานที่ทำนานๆ ครั้ง
+          วางไว้มุมขวาบนจึงไม่ไปแย่งที่ของรายการรายงานซึ่งเป็นเนื้อหาหลัก */}
+      <div className="reports-header">
+        <div style={{ minWidth: 0 }}>
+          <h1 className="page-title" style={{ marginBottom: 6 }}>รายงานที่เขียนเอง</h1>
+          <p className="brand-subtitle" style={{ margin: 0, maxWidth: 820, lineHeight: 1.6 }}>
+            เขียนคำสั่ง SELECT เพื่อดึงข้อมูลจากฐาน HOSxP มาแสดงเป็นตาราง ส่งออก Excel ได้
+            และส่งไฟล์รายงานให้หน่วยงานอื่นนำไปใช้ต่อได้
+          </p>
+        </div>
+
+        <div className="toolbar" style={{ justifyContent: "flex-end" }}>
+          <button className="button-primary" onClick={() => { setDraft({ ...EMPTY_DRAFT }); setResult(null); }}>
+            + สร้างรายงานใหม่
+          </button>
+          <button className="button-ghost" onClick={() => { setDraft({ ...SAMPLE }); setResult(null); }}>
+            เริ่มจากตัวอย่าง
+          </button>
+          <button className="button-ghost" onClick={() => fileInput.current?.click()}>
+            นำเข้าไฟล์รายงาน
+          </button>
+          <button className="button-ghost" onClick={() => exportBundle()} disabled={reports.length === 0}>
+            ส่งออกทั้งหมด
+          </button>
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".json,application/json"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void importBundle(file);
+              e.target.value = "";
+            }}
+          />
+        </div>
+      </div>
 
       {message ? <div className="status-message status-success">{message}</div> : null}
       {error ? <div className="status-message status-error">{error}</div> : null}
+
+      {/* ---- ช่องค้นหา ----
+          หน่วยบริการที่ใช้จริงมีรายงานหลักร้อยใบ การไล่หาด้วยตาไม่ไหว
+          ค้นจากชื่อ คำอธิบาย และหมวด เพราะคนจำได้ไม่เหมือนกัน บางคนจำชื่อ บางคนจำหมวด */}
+      {reports.length > 0 ? (
+        <div className="toolbar" style={{ marginBottom: 16 }}>
+          <input
+            className="input-field"
+            style={{ maxWidth: 380 }}
+            type="search"
+            placeholder="ค้นหาชื่อรายงาน คำอธิบาย หรือหมวด..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <span className="card-id">
+            {search.trim()
+              ? `พบ ${matchCount.toLocaleString()} จาก ${reports.length.toLocaleString()} รายงาน`
+              : `ทั้งหมด ${reports.length.toLocaleString()} รายงาน`}
+          </span>
+          {search.trim() ? (
+            <button className="button-ghost" onClick={() => setSearch("")}>ล้างคำค้น</button>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* ---- รายการรายงาน ----
           วางไว้บนสุดเพราะงานที่ทำบ่อยที่สุดคือ "เปิดรายงานที่มีอยู่แล้ว" ไม่ใช่การสร้างใหม่
@@ -289,20 +359,34 @@ export default function ReportsPage({
             หรือ <strong>เริ่มจากตัวอย่าง</strong> เพื่อดูโครงคำสั่งก่อน
           </p>
         </div>
+      ) : matchCount === 0 ? (
+        <div className="add-item-card" style={{ padding: "24px 22px", marginBottom: 24 }}>
+          <p style={{ margin: 0 }}>ไม่พบรายงานที่ตรงกับ &quot;{search}&quot;</p>
+        </div>
       ) : (
         <div style={{ marginBottom: 24 }}>
-          {groupReports(reports).map((group) => (
-            <div key={group.name} style={{ marginBottom: 22 }}>
-              <h2 className="section-title" style={{ marginBottom: 10 }}>
-                {group.name}{" "}
-                <span className="card-id">({group.items.length} รายงาน)</span>
-              </h2>
-              <div className="card-list" style={{ gap: 14 }}>
+          {visibleGroups.map((group) => (
+            // พับหมวดเก็บได้ เพราะหน่วยที่มีรายงานเป็นร้อยจะเปิดดูทีละหมวด
+            // เปิดค้างไว้ตอนกำลังค้นหา ไม่งั้นผลลัพธ์จะซ่อนอยู่ในหมวดที่พับไว้
+            <details key={group.name} open={search.trim() !== "" || !collapsed[group.name]}>
+              <summary
+                className="report-group-head"
+                onClick={(e) => {
+                  if (search.trim()) return;
+                  e.preventDefault();
+                  setCollapsed({ ...collapsed, [group.name]: !collapsed[group.name] });
+                }}
+              >
+                {group.name}
+                <span className="card-id" style={{ marginLeft: 8 }}>({group.items.length})</span>
+              </summary>
+
+              <div className="report-rows">
                 {group.items.map((report, index) => (
-                  // ทั้งใบกดเปิดรายงานได้ เพราะเป็นสิ่งที่คนกดบ่อยที่สุด ไม่ต้องเล็งปุ่มเล็กๆ
+                  // ทั้งแถวกดเปิดรายงานได้ ไม่ต้องเล็งปุ่มเล็กๆ
                   // ปุ่มด้านขวาต้อง stopPropagation ไม่งั้นกด "ลบ" แล้วจะเปิดรายงานตามไปด้วย
                   <div
-                    className="card report-card"
+                    className="report-row"
                     key={report.id}
                     role="button"
                     tabIndex={0}
@@ -314,68 +398,32 @@ export default function ReportsPage({
                       }
                     }}
                   >
-                    <div className="card-header" style={{ marginBottom: 0, alignItems: "flex-start" }}>
-                      <div>
-                        {/* เลขนับแยกในแต่ละหมวด แบบเดียวกับแท็บในหน้าตรวจก่อนส่งเคลม
-                            เพื่อให้อ้างกันได้ว่า "หมวดนั้นข้อ 3" โดยไม่ต้องนับรวมทั้งหน้า */}
-                        <span className="report-no">{index + 1}</span>
-                        <strong style={{ fontSize: "1.05rem" }}>{report.name}</strong>
-                        {report.source === "imported" ? (
-                          <span className="status-pill status-warn" style={{ marginLeft: 8 }}>
-                            รับมาจากหน่วยอื่น
-                          </span>
-                        ) : null}
-                        {report.description ? (
-                          <p className="brand-subtitle" style={{ margin: "6px 0 0", lineHeight: 1.6 }}>
-                            {report.description}
-                          </p>
-                        ) : null}
-                        {report.author ? (
-                          <p className="brand-subtitle" style={{ margin: "6px 0 0", fontSize: 12 }}>
-                            ผู้เขียน: {report.author}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="toolbar" style={{ margin: 0 }} onClick={(e) => e.stopPropagation()}>
-                        <button className="button-primary" onClick={() => openReport(report)}>เปิดรายงาน</button>
-                        <button className="button-ghost" onClick={() => editReport(report)}>แก้ไข</button>
-                        <button className="button-ghost" onClick={() => exportBundle([report.id])}>ส่งออกไฟล์</button>
-                        <button className="button-ghost" onClick={() => void removeReport(report)}>ลบ</button>
-                      </div>
+                    {/* เลขนับแยกในแต่ละหมวด แบบเดียวกับแท็บในหน้าตรวจก่อนส่งเคลม
+                        เพื่อให้อ้างกันได้ว่า "หมวดนั้นข้อ 3" โดยไม่ต้องนับรวมทั้งหน้า */}
+                    <span className="report-no">{index + 1}</span>
+
+                    <div className="report-row-text">
+                      <span className="report-row-name">{report.name}</span>
+                      {report.source === "imported" ? (
+                        <span className="status-pill status-warn">รับมาจากหน่วยอื่น</span>
+                      ) : null}
+                      {report.description ? (
+                        <span className="report-row-desc">{report.description}</span>
+                      ) : null}
+                    </div>
+
+                    <div className="report-row-actions" onClick={(e) => e.stopPropagation()}>
+                      <button className="button-ghost" onClick={() => editReport(report)}>แก้ไข</button>
+                      <button className="button-ghost" onClick={() => exportBundle([report.id])}>ส่งออก</button>
+                      <button className="button-ghost" onClick={() => void removeReport(report)}>ลบ</button>
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
+            </details>
           ))}
         </div>
       )}
-
-      <div className="toolbar" style={{ marginBottom: 8 }}>
-        <button className="button-primary" onClick={() => { setDraft({ ...EMPTY_DRAFT }); setSelected(null); setResult(null); }}>
-          + สร้างรายงานใหม่
-        </button>
-        <button className="button-ghost" onClick={() => { setDraft({ ...SAMPLE }); setSelected(null); setResult(null); }}>
-          เริ่มจากตัวอย่าง
-        </button>
-        <button className="button-ghost" onClick={() => fileInput.current?.click()}>
-          นำเข้าไฟล์รายงาน
-        </button>
-        <button className="button-ghost" onClick={() => exportBundle()} disabled={reports.length === 0}>
-          ส่งออกรายงานทั้งหมด
-        </button>
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".json,application/json"
-          style={{ display: "none" }}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void importBundle(file);
-            e.target.value = "";
-          }}
-        />
-      </div>
 
       {/* ---- ตัวเขียนรายงาน ---- */}
       {draft ? (
@@ -438,7 +486,7 @@ export default function ReportsPage({
             ) : null}
 
             <div className="toolbar" style={{ marginTop: 16 }}>
-              <button className="button-primary" onClick={() => void run("draft")} disabled={running}>
+              <button className="button-primary" onClick={() => void run()} disabled={running}>
                 {running ? "กำลังรัน..." : "ทดลองรัน"}
               </button>
               <button className="button-primary" onClick={() => void saveDraft()}>บันทึกรายงาน</button>
@@ -448,41 +496,7 @@ export default function ReportsPage({
         </section>
       ) : null}
 
-      {/* ---- หน้ารันรายงานที่บันทึกไว้ ---- */}
-      {selected ? (
-        <section style={{ marginTop: 32 }}>
-          <h2 className="section-title">{selected.name}</h2>
-          <div className="add-item-card">
-            {selected.source === "imported" ? (
-              <div className="state-warn" style={{ marginTop: 0 }}>
-                รายงานนี้รับมาจากหน่วยงานอื่น — ควรอ่านคำสั่งด้านล่างให้เข้าใจก่อนรัน
-                ระบบกันคำสั่งที่แก้ไขหรือทำลายข้อมูลให้แล้ว แต่คำสั่งที่ปลอดภัยก็ยังดึงข้อมูลผู้ป่วยออกมาได้
-              </div>
-            ) : null}
-
-            <details>
-              <summary style={{ cursor: "pointer", fontWeight: 600 }}>ดูคำสั่ง SQL ของรายงานนี้</summary>
-              <pre className="sql-block">{selected.sql}</pre>
-            </details>
-
-            {selected.params.length > 0 ? (
-              <ParamInputs params={selected.params} values={values} onChange={setValues} />
-            ) : null}
-
-            <div className="toolbar" style={{ marginTop: 16 }}>
-              <button className="button-primary" onClick={() => void run("saved")} disabled={running}>
-                {running ? "กำลังรัน..." : "รันรายงาน"}
-              </button>
-              <button className="button-ghost" onClick={() => void exportExcel()} disabled={!result || result.rows.length === 0}>
-                ส่งออก Excel
-              </button>
-              <button className="button-ghost" onClick={() => { setSelected(null); setResult(null); }}>ปิด</button>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {/* ---- ผลลัพธ์ ---- */}
+      {/* ---- ผลลัพธ์ของการทดลองรันตอนเขียน ---- */}
       {result ? (
         <section style={{ marginTop: 32 }}>
           <h2 className="section-title">
