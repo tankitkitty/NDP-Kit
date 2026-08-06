@@ -80,7 +80,46 @@ export interface ServiceCheckConfig {
   drugLabel?: string;
   /** ข้อความต่อท้ายคำแนะนำ เช่น เงื่อนไขจำนวนครั้งที่เบิกได้ */
   extraAdvice?: string;
+  /**
+   * เพศของกลุ่มเป้าหมาย — ไม่ใส่ = ไม่จำกัดเพศ
+   * (patient.sex ของ HOSxP ใช้ '1' = ชาย, '2' = หญิง)
+   */
+  sex?: "male" | "female";
+  /** อายุต่ำสุดของกลุ่มเป้าหมาย (ปีเต็ม ณ วันรับบริการ ไม่ใช่ปีปัจจุบัน) */
+  minAge?: number;
+  /** อายุสูงสุดของกลุ่มเป้าหมาย (ปีเต็ม ณ วันรับบริการ) */
+  maxAge?: number;
+  /**
+   * true = ตัดหญิงตั้งครรภ์ออกจากกลุ่มเป้าหมาย
+   *
+   * บริการส่งเสริมป้องกันหลายรายการ สปสช. แยกจ่ายคนละชุดสิทธิ์ระหว่างหญิงทั่วไปกับ
+   * หญิงตั้งครรภ์ (ของหญิงตั้งครรภ์ไปรวมอยู่ในชุดฝากครรภ์แล้ว) ถ้านับรวมมาด้วยจะ
+   * กลายเป็นเตือนให้ไปคีย์รหัสที่เบิกไม่ได้
+   */
+  excludePregnant?: boolean;
 }
+
+/**
+ * รหัสวินิจฉัยที่บอกว่า "ขณะนั้นกำลังตั้งครรภ์อยู่"
+ *
+ * Z321 (ผลทดสอบตั้งครรภ์เป็นบวก) / Z33 (ภาวะตั้งครรภ์ที่พบร่วม) / Z34-Z36 (ดูแลครรภ์)
+ * และกลุ่ม O10-O48 ซึ่งเป็นภาวะแทรกซ้อนระหว่างตั้งครรภ์
+ *
+ * ไม่รวม Z320 เพราะแปลว่าผลทดสอบเป็นลบ (ไม่ได้ตั้งครรภ์) ซึ่งตรงข้ามกันคนละเรื่อง
+ */
+const PREGNANCY_DX_PREFIXES = ["Z321", "Z33", "Z34", "Z35", "Z36", "O1", "O2", "O3", "O4"];
+
+/**
+ * รหัสที่บอกว่าครรภ์นั้น "จบแล้ว" — คลอด (Z37, O80-O84) หลังคลอด (Z39, O85-O99)
+ * หรือแท้ง/ท้องนอกมดลูก (O00-O08)
+ *
+ * ต้องดูคู่กับรายการข้างบนเสมอ เพราะการตรวจย้อนหลัง 280 วันจะเจอ dx ฝากครรภ์ของ
+ * คนที่คลอดไปแล้วด้วย ถ้าไม่ตัดออกจะกันคนที่คลอดแล้วออกจากรายงานทั้งที่เธอมีสิทธิ์
+ */
+const PREGNANCY_END_DX_PREFIXES = ["Z37", "Z39", "O0", "O8", "O9"];
+
+/** ระยะเวลาที่ย้อนหลังไปหา dx ฝากครรภ์ = ความยาวการตั้งครรภ์เต็มที่ (40 สัปดาห์) */
+const PREGNANCY_LOOKBACK_DAYS = 280;
 
 interface ItemRow {
   icode: string;
@@ -111,6 +150,28 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
   // รายการรหัสยาว 20 กว่ารหัสใส่ในหัวตาราง/ช่องผลตรวจไม่ไหว ย่อเหลือจำนวนรหัส
   // ส่วนรายการเต็มไปอยู่ในคำแนะนำการแก้ไขซึ่งมีที่ให้อ่านพอ
   const drugCodeShort = drugCodes.length > 3 ? `${drugCodes.length} รหัส` : drugCodes.join(" หรือ ");
+  // ---- กลุ่มเป้าหมาย (เพศ/อายุ/ตั้งครรภ์) ----
+  const needSex = cfg.sex === "male" || cfg.sex === "female";
+  const sexValue = cfg.sex === "male" ? "1" : "2";
+  const needAge = typeof cfg.minAge === "number" || typeof cfg.maxAge === "number";
+  const minAge = typeof cfg.minAge === "number" ? cfg.minAge : 0;
+  const maxAge = typeof cfg.maxAge === "number" ? cfg.maxAge : 200;
+  const needPregnancy = cfg.excludePregnant === true;
+  const needTarget = needSex || needAge || needPregnancy;
+  const targetLabel = [
+    needSex ? (cfg.sex === "male" ? "ชาย" : "หญิง") : "",
+    needAge
+      ? typeof cfg.minAge === "number" && typeof cfg.maxAge === "number"
+        ? `อายุ ${minAge}-${maxAge} ปี`
+        : typeof cfg.minAge === "number"
+          ? `อายุ ${minAge} ปีขึ้นไป`
+          : `อายุไม่เกิน ${maxAge} ปี`
+      : "",
+    needPregnancy ? "ไม่รวมหญิงตั้งครรภ์" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   const adpLabel =
     cfg.adpLabel ||
     [
@@ -125,7 +186,9 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
     id: cfg.id,
     title: cfg.title,
     description:
-      `เคส${cfg.serviceName} ต้องมี ICD-10 ${icdLabel}` +
+      `เคส${cfg.serviceName}` +
+      (needTarget ? ` (${targetLabel})` : "") +
+      ` ต้องมี ICD-10 ${icdLabel}` +
       (needIcd9 ? ` และ ICD-9-CM ${icd9Label}` : "") +
       (needAdp ? ` และค่าบริการรหัส ${adpLabel}` : "") +
       (needDrug ? ` และรายการยารหัส ${drugCodeShort}` : "") +
@@ -135,7 +198,9 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
       try {
         // icode ของแต่ละหน่วยบริการไม่เหมือนกัน จึงต้องถามจากฐานเอง ห้าม hard-code
         const adpItems = needAdp ? await findServiceItems(adpCodes, billCodes) : [];
-        const drugItems = needDrug ? await findByDrugCode(drugCodes) : [];
+        // รหัสที่ สปสช. ประกาศเป็น GPU ต้องแปลงเป็นรหัส TMT ระดับที่ HOSxP เก็บไว้จริงก่อน
+        const drugSearchCodes = needDrug ? await expandTmtCodes(drugCodes) : [];
+        const drugItems = needDrug ? await findByDrugCode(drugSearchCodes) : [];
         const adpIcodes = adpItems.map((i) => i.icode);
         const drugIcodes = drugItems.map((i) => i.icode);
         const allIcodes = Array.from(new Set([...adpIcodes, ...drugIcodes]));
@@ -183,6 +248,17 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
         const labItems = needLab ? await findLabItems(labCodes) : [];
         const labItemCodes = labItems.map((i) => i.icode);
 
+        // ลำดับการ push params ต้องเรียงตามลำดับที่ ? โผล่ใน SQL จริงเท่านั้น
+        // (adp มาก่อน lab ในรายการ SELECT ข้างล่าง จึงต้อง push ตามลำดับเดียวกัน)
+        // เคยสลับกันอยู่ ซึ่งไม่แสดงอาการเพราะฐานส่วนใหญ่ยังไม่ได้ตั้งรหัส TMLT ไว้
+        // ทำให้ฝั่ง lab ไม่มี params เลย พอหน่วยไหนตั้งครบทั้งสองทางจะนับผิดทันที
+        let adpCountSql = "0";
+        if (adpIcodes.length > 0) {
+          params.push(...adpIcodes);
+          adpCountSql = `(SELECT COUNT(*) FROM opitemrece i
+                           WHERE i.vn = c.vn AND i.icode IN (${ph(adpIcodes.length)}))`;
+        }
+
         let labCountSql = "0";
         if (labItemCodes.length > 0) {
           params.push(...labItemCodes);
@@ -192,18 +268,37 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
                            WHERE lh.vn = c.vn AND lo.lab_items_code IN (${ph(labItemCodes.length)}))`;
         }
 
-        let adpCountSql = "0";
-        if (adpIcodes.length > 0) {
-          params.push(...adpIcodes);
-          adpCountSql = `(SELECT COUNT(*) FROM opitemrece i
-                           WHERE i.vn = c.vn AND i.icode IN (${ph(adpIcodes.length)}))`;
-        }
-
         let drugCountSql = "0";
         if (drugIcodes.length > 0) {
           params.push(...drugIcodes);
           drugCountSql = `(SELECT COUNT(*) FROM opitemrece i
                             WHERE i.vn = c.vn AND i.icode IN (${ph(drugIcodes.length)}))`;
+        }
+
+        // ---- คอลัมน์บอกว่าเคสนี้อยู่ในกลุ่มเป้าหมายหรือไม่ ----
+        // ไม่กรองใน WHERE เพราะอยากได้จำนวนที่ถูกตัดออกมาแสดงด้วย ถ้ากรองทิ้งไปเงียบๆ
+        // ผู้ใช้จะไม่รู้ว่าเคสที่คีย์ไว้หายไปไหน และแยกไม่ออกระหว่าง "ไม่มีเคส" กับ
+        // "มีเคสแต่ไม่เข้าเกณฑ์กลุ่มเป้าหมาย" ซึ่งต้องแก้คนละแบบ
+        //
+        // ovstdiag.hn เป็นทางเดียวที่ย้อนดู dx ของคนเดิมข้าม visit ได้โดยไม่ต้อง join
+        // ovst ซ้อนอีกชั้น ถ้ารุ่นไหนไม่มีคอลัมน์นี้ก็ตรวจการตั้งครรภ์ไม่ได้ ต้องบอกผู้ใช้
+        const dxHasHn = needPregnancy ? (await tableColumns("ovstdiag")).has("hn") : false;
+        let pregnancySql = "''";
+        if (needPregnancy && dxHasHn) {
+          const pregLike = PREGNANCY_DX_PREFIXES.map(() => `REPLACE(pd.icd10, '.', '') LIKE ?`).join(" OR ");
+          const endLike = PREGNANCY_END_DX_PREFIXES.map(() => `REPLACE(ed.icd10, '.', '') LIKE ?`).join(" OR ");
+          params.push(...PREGNANCY_DX_PREFIXES.map((c) => `${c}%`));
+          params.push(...PREGNANCY_END_DX_PREFIXES.map((c) => `${c}%`));
+          pregnancySql = `(SELECT GROUP_CONCAT(DISTINCT pd.icd10 ORDER BY pd.icd10 SEPARATOR ', ')
+                             FROM ovstdiag pd
+                            WHERE pd.hn = o.hn
+                              AND pd.vstdate BETWEEN DATE_SUB(o.vstdate, INTERVAL ${PREGNANCY_LOOKBACK_DAYS} DAY)
+                                                 AND o.vstdate
+                              AND (${pregLike})
+                              AND NOT EXISTS (SELECT 1 FROM ovstdiag ed
+                                               WHERE ed.hn = o.hn
+                                                 AND ed.vstdate BETWEEN pd.vstdate AND o.vstdate
+                                                 AND (${endLike})))`;
         }
 
         // ---- ชุดเคสที่ต้องตรวจ = เคสที่เข้าเงื่อนไขอย่างน้อยหนึ่งข้อ ----
@@ -259,7 +354,10 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
                   ${icd9FoundSql} AS icd9_found,
                   ${adpCountSql} AS adp_count,
                   ${labCountSql} AS lab_count,
-                  ${drugCountSql} AS drug_count
+                  ${drugCountSql} AS drug_count,
+                  COALESCE(p.sex, '') AS sex,
+                  TIMESTAMPDIFF(YEAR, p.birthday, o.vstdate) AS age,
+                  ${pregnancySql} AS preg_found
            FROM (${candidateSql}) c
            JOIN ovst o ON o.vn = c.vn
            LEFT JOIN patient p ON p.hn = o.hn
@@ -268,7 +366,35 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
           params
         );
 
-        const rows = raw.map((r: any) => {
+        // แยกเคสที่ไม่เข้าเกณฑ์กลุ่มเป้าหมายออกก่อน แล้วเก็บไว้แสดงเป็นตารางต่างหาก
+        const outOfTarget: Record<string, unknown>[] = [];
+        const inTarget = needTarget
+          ? raw.filter((r: any) => {
+              const age = r.age === null || r.age === undefined ? null : Number(r.age);
+              const preg = String(r.preg_found || "").trim();
+              const reasons: string[] = [];
+              if (needSex && String(r.sex || "") !== sexValue) {
+                reasons.push(`ไม่ใช่เพศ${cfg.sex === "male" ? "ชาย" : "หญิง"}`);
+              }
+              if (needAge) {
+                if (age === null) reasons.push("ไม่มีวันเกิดในทะเบียน");
+                else if (age < minAge || age > maxAge) reasons.push(`อายุ ${age} ปี นอกช่วง ${minAge}-${maxAge}`);
+              }
+              if (needPregnancy && preg !== "") reasons.push(`ตั้งครรภ์ (${preg})`);
+              if (reasons.length === 0) return true;
+              outOfTarget.push({
+                vstdate: r.vstdate,
+                vn: r.vn,
+                hn: r.hn,
+                patient_name: r.patient_name,
+                age: age === null ? "" : String(age),
+                reason: reasons.join(" + "),
+              });
+              return false;
+            })
+          : raw;
+
+        const rows = inTarget.map((r: any) => {
           const icd = String(r.icd_found || "").trim();
           const adpCount = Number(r.adp_count || 0);
           const labCount = Number(r.lab_count || 0);
@@ -292,6 +418,7 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
             vn: r.vn,
             hn: r.hn,
             patient_name: r.patient_name,
+            age: r.age === null || r.age === undefined ? "" : String(r.age),
             icd_found: hasIcd ? icd : "",
             icd9_found: hasIcd9 ? icd9 : "",
             adp_found: adpCount > 0 ? `${adpCount} รายการ` : "",
@@ -327,12 +454,16 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
           sections.push({
             // เว้นวรรคหลังชื่อบริการเสมอ เพราะชื่อที่ลงท้ายด้วยอักษรอังกฤษ (Triferdine)
             // ติดกับคำไทยแล้วอ่านยาก
-            title: `เคส${cfg.serviceName} ในช่วง ${ctx.from} ถึง ${ctx.to} (${total} เคส)`,
+            title:
+              `เคส${cfg.serviceName}` +
+              (needTarget ? ` ${targetLabel}` : "") +
+              ` ในช่วง ${ctx.from} ถึง ${ctx.to} (${total} เคส)`,
             columns: [
               { key: "vstdate", label: "วันที่รับบริการ" },
               { key: "vn", label: "VN" },
               { key: "hn", label: "HN" },
               { key: "patient_name", label: "ชื่อ-สกุล" },
+              ...(needAge ? [{ key: "age", label: "อายุ (ปี)" }] : []),
               { key: "icd_found", label: `ICD-10 (${icdLabel})` },
               ...(needIcd9 ? [{ key: "icd9_found", label: `ICD-9-CM (${icd9Label})` }] : []),
               ...(needAdp ? [{ key: "adp_found", label: "ค่าบริการที่คีย์" }] : []),
@@ -347,6 +478,27 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
                 : bad > 0
                   ? "แถวสีแดงคือเคสที่ข้อมูลไม่ครบ ต้องกลับไปคีย์เพิ่มใน HOSxP ก่อนส่งเคลม"
                   : undefined,
+          });
+        }
+
+        // เคสที่คีย์รหัสไว้แต่ไม่เข้าเกณฑ์กลุ่มเป้าหมาย — ไม่ใช่ความผิดพลาดเสมอไป
+        // (ให้บริการนอกเกณฑ์ได้ แค่เบิกชุดนี้ไม่ได้) จึงไม่ทำเป็นแถวสีแดง
+        if (outOfTarget.length > 0) {
+          sections.push({
+            title: `เคสที่ไม่เข้าเกณฑ์กลุ่มเป้าหมาย ${targetLabel} (${outOfTarget.length} เคส)`,
+            columns: [
+              { key: "vstdate", label: "วันที่รับบริการ" },
+              { key: "vn", label: "VN" },
+              { key: "hn", label: "HN" },
+              { key: "patient_name", label: "ชื่อ-สกุล" },
+              { key: "age", label: "อายุ (ปี)" },
+              { key: "reason", label: "เหตุที่ไม่นับ" },
+            ],
+            rows: outOfTarget,
+            note:
+              `เคสเหล่านี้มี ICD-10 หรือรหัสค่าบริการของบริการนี้อยู่ แต่ไม่เข้าเกณฑ์ ${targetLabel} ` +
+              `จึงไม่ถูกนับในตารางด้านบน — แสดงไว้ให้ตรวจทานว่าคีย์ผิดคนหรือผิดรหัสหรือไม่ ` +
+              `ถ้าให้บริการจริงตามที่คีย์ก็ปล่อยไว้ได้ เพียงแต่เบิกชุดสิทธิ์นี้ไม่ได้`,
           });
         }
 
@@ -396,7 +548,11 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
             note: drugMissing
               ? `ยังไม่มีรายการยาใดในฐานนี้ตั้งรหัสตรงกับรายการที่ สปสช. กำหนดเลย — ทุกเคสจึงขึ้นว่าขาดยา ` +
                 `ต้องไปตั้งรหัสยาก่อน (รหัสที่ยอมรับ: ${drugCodeLabel})`
-              : undefined,
+              : drugSearchCodes.length > drugCodes.length
+                ? `สปสช. ประกาศรหัสมาเป็น GPU ${drugCodes.length} รหัส ระบบแปลงเป็นรหัส TMT ระดับ GP/TPU ` +
+                  `ที่ HOSxP ใช้เก็บจริงได้ ${drugSearchCodes.length} รหัส แล้วจึงค้นในทะเบียนยา — ` +
+                  `รหัสในตารางนี้จึงไม่ใช่เลขเดียวกับที่ สปสช. ประกาศ แต่เป็นยาตัวเดียวกัน`
+                : undefined,
           });
         }
 
@@ -410,11 +566,15 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
           noDrug > 0 ? `ขาด${drugLabel} ${noDrug} เคส` : "",
         ].filter(Boolean);
 
+        // มีเคสแต่ถูกตัดออกทั้งหมดด้วยเกณฑ์กลุ่มเป้าหมาย ต้องบอกให้ชัด ไม่งั้นจะอ่านว่า
+        // "ไม่มีใครมารับบริการเลย" ซึ่งคนละความหมายกับ "มีแต่ไม่ใช่กลุ่มที่เบิกได้"
+        const outNote = outOfTarget.length > 0 ? ` (อีก ${outOfTarget.length} เคสไม่เข้าเกณฑ์${targetLabel})` : "";
+
         const summary =
           total === 0
             ? setupMissing
-              ? `ไม่พบเคส${cfg.serviceName} ในช่วงวันที่ที่เลือก และยังตั้งรหัสไม่ครบ (ดูรายละเอียด)`
-              : `ไม่พบเคส${cfg.serviceName} ในช่วงวันที่ที่เลือก`
+              ? `ไม่พบเคส${cfg.serviceName} ในช่วงวันที่ที่เลือก และยังตั้งรหัสไม่ครบ (ดูรายละเอียด)${outNote}`
+              : `ไม่พบเคส${cfg.serviceName} ในช่วงวันที่ที่เลือก${outNote}`
             : bad === 0
               ? `เคส${cfg.serviceName} ทั้ง ${total} เคสมีข้อมูลครบแล้ว`
               : `พบ ${bad} จาก ${total} เคสที่ข้อมูลไม่ครบ — ${breakdown.join(", ")}`;
@@ -445,6 +605,18 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
             `(รายการค่าบริการ) หรือหน้าจอรายการยา แล้วใส่รหัสให้ตรง — ตั้งครั้งเดียวใช้ได้ตลอด\n` +
             (needDrug ? `\nรหัสยาที่ สปสช. ยอมรับสำหรับบริการนี้: ${drugCodeLabel}\n` : "") +
             (cfg.extraAdvice ? `\n${cfg.extraAdvice}\n` : "") +
+            (needTarget
+              ? `\nกลุ่มเป้าหมายของบริการนี้คือ ${targetLabel} — นับอายุเป็นปีเต็ม ณ วันที่รับบริการ ` +
+                `จากวันเกิดในทะเบียนผู้ป่วย เคสที่ไม่เข้าเกณฑ์จะแยกไปอยู่ตารางต่างหากพร้อมบอกเหตุผล\n` +
+                (needPregnancy
+                  ? `การตัดหญิงตั้งครรภ์ดูจากวินิจฉัยฝากครรภ์ (Z321/Z33/Z34/Z35/Z36 หรือกลุ่ม O10-O48) ` +
+                    `ที่บันทึกไว้ภายใน ${PREGNANCY_LOOKBACK_DAYS} วันก่อนวันรับบริการ และยังไม่มีรหัสคลอด/หลังคลอด ` +
+                    `(Z37/Z39 หรือกลุ่ม O00-O08, O80-O99) ตามมา — ถ้าหน่วยบริการไม่ได้ลงวินิจฉัยฝากครรภ์ไว้ ` +
+                    `ระบบจะไม่รู้ว่าเคสนั้นตั้งครรภ์ ต้องตรวจทานเอง` +
+                    (dxHasHn ? "" : ` (ฐานนี้ไม่มีคอลัมน์ hn ในตาราง ovstdiag จึงตรวจการตั้งครรภ์ให้ไม่ได้)`) +
+                    `\n`
+                  : "")
+              : "") +
             `\nหมายเหตุ: ตรวจเฉพาะผู้ป่วยนอก (ovst) เพราะบริการที่เบิกด้วยรหัสนี้เป็นบริการผู้ป่วยนอก`,
         };
       } catch (error) {
@@ -604,6 +776,45 @@ async function findByIcd9(icd9List: string[]): Promise<ItemRow[]> {
 }
 
 /**
+ * แปลงรหัส GPU ให้ครอบคลุมรหัส TMT ระดับอื่นที่ HOSxP เก็บไว้จริงกับรายการยา
+ *
+ * TMT มีหลายชั้น (VTM > GP > GPU > TPU > TP) สปสช. ประกาศสิทธิประโยชน์เป็นรหัส
+ * **GPU** แต่ HOSxP เก็บไว้ที่ drugitems เป็นรหัส **GP** (tmt_gp_code) และ **TPU/TP**
+ * (sks_drug_code, tmt_tp_code) ซึ่งเป็นคนละเลขกัน — เทียบรหัสตรงๆ จึงไม่มีวันเจอ
+ * แม้หน่วยบริการจะตั้งรหัสไว้ถูกต้องครบถ้วนแล้วก็ตาม
+ *
+ * ตัวอย่างจริง: GPU 689609 (folic acid 5 mg) คู่กับ GP 689595 ซึ่งเป็นเลขที่ตั้งไว้
+ * ในทะเบียนยา ถ้าไม่ไล่ผ่านตารางแปลงจะรายงานว่า "ยังไม่มีรายการยาใดตั้งรหัสไว้เลย"
+ * ทั้งที่ตั้งไว้แล้ว แล้วทุกเคสจะขึ้นว่าขาดยาไปด้วย
+ *
+ * ตารางแปลงเป็นทะเบียนมาตรฐานที่มากับ HOSxP (ไม่ใช่ข้อมูลที่หน่วยบริการกรอกเอง)
+ * ถ้ารุ่นไหนไม่มีก็ข้ามไป ใช้รหัสที่ให้มาตรงๆ เหมือนเดิม
+ */
+async function expandTmtCodes(codes: string[]): Promise<string[]> {
+  const out = new Set(codes);
+  if (codes.length === 0) return [];
+
+  const links: [string, string, string][] = [
+    ["tmt_gp_to_gpu", "gpu_code", "gp_code"],
+    ["tmt_gpu_to_tpu", "gpu_code", "tpu_code"],
+  ];
+
+  for (const [table, fromCol, toCol] of links) {
+    const cols = await tableColumns(table);
+    if (!cols.has(fromCol) || !cols.has(toCol)) continue;
+    const rows: any = await selectOnly(
+      `SELECT DISTINCT ${toCol} AS code FROM ${table} WHERE ${fromCol} IN (${ph(codes.length)})`,
+      codes
+    );
+    for (const r of rows) {
+      const code = String(r.code || "").trim();
+      if (code) out.add(code);
+    }
+  }
+  return Array.from(out);
+}
+
+/**
  * รายการยาที่ตั้งรหัสยามาตรฐานตรงกับที่ สปสช. กำหนด
  *
  * รหัสยาที่ HOSxP ส่งออกไป NDP อยู่ใน drugitems.sks_drug_code แต่บางหน่วยกรอกไว้ใน
@@ -613,7 +824,7 @@ async function findByIcd9(icd9List: string[]): Promise<ItemRow[]> {
 async function findByDrugCode(drugCodes: string[]): Promise<ItemRow[]> {
   const cols = await tableColumns("drugitems");
   const candidates = ["sks_drug_code", "tmt_tp_code", "tmt_gp_code", "ttmt_code"].filter((c) => cols.has(c));
-  if (candidates.length === 0) return [];
+  if (candidates.length === 0 || drugCodes.length === 0) return [];
 
   const conds = candidates.map((c) => `${c} IN (${ph(drugCodes.length)})`);
   const params: unknown[] = [];

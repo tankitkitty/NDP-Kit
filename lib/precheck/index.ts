@@ -17,6 +17,8 @@ import condom from "./checks/condom";
 import hpvScreening from "./checks/hpvScreening";
 import diabetesScreening from "./checks/diabetesScreening";
 import cholesterolScreening from "./checks/cholesterolScreening";
+import anemiaScreening from "./checks/anemiaScreening";
+import ironSupplement from "./checks/ironSupplement";
 
 /** ทะเบียนการ์ดตรวจสอบทั้งหมด (ลำดับ = ลำดับที่แสดงบน dashboard) */
 export const CHECKS: CheckDefinition[] = [
@@ -40,6 +42,8 @@ export const CHECKS: CheckDefinition[] = [
   hpvScreening,
   diabetesScreening,
   cholesterolScreening,
+  anemiaScreening,
+  ironSupplement,
 ];
 
 export function getCheck(id: string): CheckDefinition | undefined {

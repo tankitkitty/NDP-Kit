@@ -55,6 +55,8 @@ const QUERY_CARDS: CardMeta[] = [
   { id: "diabetes-screening", title: "คัดกรองเบาหวานกลุ่มเสี่ยง (Z018 + TLMT/CSMBS/NHSO)", description: "เคสคัดกรองเบาหวานต้องมี ICD-10 Z018 และมีอย่างใดอย่างหนึ่งใน TMLT 320281 (แล็บ), CSMBS 32203 หรือ NHSO 12003", needsRange: true },
   { id: "cholesterol-screening", title: "คัดกรอง Total Cholesterol + HDL อายุ 35 ปีขึ้นไป (Z108)", description: "เคสคัดกรองไขมันต้องมี ICD-10 Z108 และมีอย่างใดอย่างหนึ่งใน GPU 31001, TMLT 320259 (แล็บ), CSMBS 32004 หรือ NHSO 12004", needsRange: true },
   { id: "condom", title: "บริการถุงยางพร้อมให้คำปรึกษา (ICD-10 Z30 + bill code)", description: "เคสถุงยางพร้อมให้คำปรึกษาต้องมีทั้ง ICD-10 Z30/Z300/Z304/Z309 และรายการค่าบริการ bill code 6201001/6201005/6201006/6201007", needsRange: true },
+  { id: "anemia-screening", title: "คัดกรองโลหิตจางจากการขาดธาตุเหล็ก CBC หญิง 13-24 ปี (Z130)", description: "เคสหญิงอายุ 13-24 ปีที่ไม่ตั้งครรภ์ ต้องมี ICD-10 Z130 และมีอย่างใดอย่างหนึ่งใน TMLT 300034/300035 (แล็บ) หรือ CSMBS 30101/30102/13001", needsRange: true },
+  { id: "iron-supplement", title: "บริการจ่ายยาเม็ดเสริมธาตุเหล็ก Ferrofolic (Z130 + รหัส TMT)", description: "เคสจ่ายยาเสริมธาตุเหล็กต้องมีทั้ง ICD-10 Z130 และรายการยาที่ตั้งรหัส TMT ตรงกับ GPU 10 รหัสที่ สปสช. กำหนด", needsRange: true },
 ];
 
 /**
@@ -70,7 +72,7 @@ const TABS: { key: string; label: string; hint: string; ids: string[] }[] = [
     key: "service",
     label: "ตรวจข้อมูลการบริการ",
     hint: "ตรวจข้อมูลที่คีย์จริงในช่วงวันที่ที่เลือก ก่อนส่งเคลมแต่ละรอบ",
-    ids: ["auth-code", "postnatal-care", "triferdine", "pregnancy-test", "contraceptive", "condom", "hpv-screening", "diabetes-screening", "cholesterol-screening", "claim-log"],
+    ids: ["auth-code", "postnatal-care", "triferdine", "pregnancy-test", "contraceptive", "condom", "hpv-screening", "diabetes-screening", "cholesterol-screening", "anemia-screening", "iron-supplement", "claim-log"],
   },
   {
     key: "master",
