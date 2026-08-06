@@ -117,6 +117,17 @@ export async function query(sql: string, values?: any[]) {
   return rows;
 }
 
+/**
+ * ยืมคอนเนกชันเดี่ยวจาก pool — ผู้เรียกต้อง release() เองเสมอ
+ *
+ * มีไว้ให้รายงานที่ผู้ใช้เขียนเอง ซึ่งต้องรู้ threadId ของคอนเนกชันที่กำลังรันอยู่
+ * เพื่อสั่ง KILL QUERY ทิ้งเมื่อทำงานนานเกินกำหนด (ดู lib/reports/run.ts)
+ * งานทั่วไปให้ใช้ query() ตามเดิม ไม่ต้องมายุ่งกับการจัดการคอนเนกชันเอง
+ */
+export async function getPooledConnection() {
+  return getPool().getConnection();
+}
+
 export async function getHospitalName(): Promise<string> {
   try {
     const rows: any = await query("SELECT hospitalname FROM opdconfig LIMIT 1");

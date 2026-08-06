@@ -466,6 +466,40 @@ a.version-check-new:hover {
   padding: 18px;
 }
 
+/* เลขลำดับรายงานในหมวด — วงกลมเล็กหน้าชื่อ ให้กวาดตาหาข้อที่ต้องการได้เร็ว */
+.report-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  margin-right: 8px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+/* การ์ดรายงานกดได้ทั้งใบ — ต้องมีสัญญาณว่ากดได้ ไม่งั้นผู้ใช้จะไม่รู้แล้วไปเล็งปุ่มเล็กๆ แทน */
+.report-card {
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.report-card:hover {
+  border-color: var(--button);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.report-card:focus-visible {
+  outline: 2px solid var(--button);
+  outline-offset: 2px;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -762,6 +796,13 @@ a.version-check-new:hover {
 .status-pill.status-pending {
   background: #f3f4f6;
   color: #6b7280;
+}
+
+/* เหลือง = "ควรตรวจทานก่อน" ตามกติกาสีเดียวกับแถวตารางและ .state-warn
+   ใช้กับป้ายอย่าง "รายงานรับมาจากหน่วยอื่น" ที่ยังไม่ผิดแต่ต้องอ่านก่อนใช้ */
+.status-pill.status-warn {
+  background: #fffbeb;
+  color: #92400e;
 }
 
 .action-col {

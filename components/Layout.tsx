@@ -6,13 +6,13 @@ import { useRouter } from "next/router";
 import BrandLogo from "./BrandLogo";
 import VersionCheck from "./VersionCheck";
 import {
-  ChecklistIcon,
   DatabaseIcon,
   FeeScheduleIcon,
   HomeIcon,
   IconProps,
   LogoutIcon,
   PrecheckIcon,
+  ReportIcon,
 } from "./NavIcons";
 
 /**
@@ -41,7 +41,11 @@ const NAV_ITEMS: NavItem[] = [
   // ถ้าจะเปิดใช้อีกครั้ง เอาบรรทัดล่างนี้กลับมา (EligibilityIcon มีอยู่แล้วใน NavIcons)
   // { href: "/eligibility-check", label: "ตรวจสอบสิทธิ", Icon: EligibilityIcon },
   { href: "/ndp-precheck", label: "ตรวจก่อนส่งเคลม NDP", Icon: PrecheckIcon },
-  { href: "/setup-checklist", label: "Checklist ตั้งค่า", Icon: ChecklistIcon },
+  { href: "/reports", label: "รายงานที่เขียนเอง", Icon: ReportIcon },
+  // ปิดเมนู Checklist ตั้งค่าไว้ก่อน ตัวหน้ายังอยู่ครบ เข้าถึงได้ทาง URL ตรงๆ
+  // ถ้าจะเปิดใช้อีกครั้ง เอาบรรทัดล่างนี้กลับมา (ChecklistIcon มีอยู่แล้วใน NavIcons)
+  // และเอาปุ่มบนหน้าแรกใน pages/index.tsx กลับมาด้วย
+  // { href: "/setup-checklist", label: "Checklist ตั้งค่า", Icon: ChecklistIcon },
   { href: "/settings", label: "ตั้งค่าการเชื่อมต่อ", Icon: DatabaseIcon },
 ];
 

@@ -43,9 +43,12 @@ export default function Home({ loginname, hospitalName }: { loginname: string; h
           <Link href="/ndp-precheck" className="button-primary">
             ตรวจก่อนส่งเคลม NDP
           </Link>
+          {/* ปิดปุ่ม Checklist ตั้งค่าไว้ให้ตรงกับแถบเมนูซ้ายที่ปิดไปแล้ว ตัวหน้ายังอยู่ครบ
+              เข้าถึงได้ทาง URL ตรงๆ — ถ้าจะเปิดใช้อีกครั้ง เอาบรรทัดล่างนี้กลับมา
           <Link href="/setup-checklist" className="button-primary">
             Checklist ตั้งค่าเริ่มต้น
           </Link>
+          */}
         </div>
       </div>
     </Layout>

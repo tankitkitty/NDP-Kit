@@ -39,6 +39,16 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
 type NhsoStatus = { env: string; items: NhsoConfigItem[]; ready: boolean };
 
+/**
+ * ปิดแท็บฐานข้อมูล 43 แฟ้มและ NHSO API ไว้ก่อน — โค้ด ฟอร์ม และ API ยังอยู่ครบทุกส่วน
+ * แค่ไม่แสดงบนหน้าจอ เปลี่ยนเป็น true เพื่อเปิดกลับมาใช้ได้ทันทีโดยไม่ต้องแก้อย่างอื่น
+ *
+ * ทำแบบเดียวกับที่ปิดเมนูนำเข้า 43 แฟ้มและตรวจสอบสิทธิไว้ใน components/Layout.tsx
+ * เพราะสองส่วนนี้ยังไม่ได้ใช้จริงในหน่วยบริการ แสดงไว้แล้วมีแต่ทำให้สับสนว่าต้องกรอก
+ *
+ * เมื่อปิดอยู่จะไม่แสดงแถบแท็บเลย เพราะเหลือแท็บเดียวแล้วแถบแท็บไม่มีความหมาย
+ */
+const SHOW_EXTRA_TABS = false;
 
 function validateConfig(config: Config): string | null {
   if (!config.host.trim()) return "กรุณาระบุ Host";
@@ -285,17 +295,19 @@ export default function Settings({
           </div>
         ) : null}
 
-        <div className="tabs">
-          <button className={`tab ${activeTab === "main" ? "active" : ""}`} onClick={() => setActiveTab("main")}>
-            ฐานข้อมูลหลัก
-          </button>
-          <button className={`tab ${activeTab === "file43" ? "active" : ""}`} onClick={() => setActiveTab("file43")}>
-            ฐานข้อมูล 43 แฟ้ม
-          </button>
-          <button className={`tab ${activeTab === "nhso" ? "active" : ""}`} onClick={() => setActiveTab("nhso")}>
-            NHSO API
-          </button>
-        </div>
+        {SHOW_EXTRA_TABS ? (
+          <div className="tabs">
+            <button className={`tab ${activeTab === "main" ? "active" : ""}`} onClick={() => setActiveTab("main")}>
+              ฐานข้อมูลหลัก
+            </button>
+            <button className={`tab ${activeTab === "file43" ? "active" : ""}`} onClick={() => setActiveTab("file43")}>
+              ฐานข้อมูล 43 แฟ้ม
+            </button>
+            <button className={`tab ${activeTab === "nhso" ? "active" : ""}`} onClick={() => setActiveTab("nhso")}>
+              NHSO API
+            </button>
+          </div>
+        ) : null}
 
         {activeTab === "main" ? (
         <section>
@@ -362,7 +374,7 @@ export default function Settings({
         </section>
         ) : null}
 
-        {activeTab === "file43" ? (
+        {SHOW_EXTRA_TABS && activeTab === "file43" ? (
         <section>
           <h2 className="section-title">ตั้งค่าฐานข้อมูล 43 แฟ้ม</h2>
           <div className="add-item-card" style={{ maxWidth: 560 }}>
@@ -427,7 +439,7 @@ export default function Settings({
         </section>
         ) : null}
 
-        {activeTab === "nhso" ? (
+        {SHOW_EXTRA_TABS && activeTab === "nhso" ? (
         <section>
           <div className="section-header">
             <h2 className="section-title" style={{ margin: 0 }}>
