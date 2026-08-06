@@ -22,6 +22,18 @@ import {
  *         จะรายงานเวอร์ชันใหม่ให้เงียบๆ ตามความยินยอมเดิม
  * POST -> บันทึกคำตอบจากแบบฟอร์ม ถ้ายินยอมก็ส่งข้อมูลทันที
  */
+/**
+ * บันทึกผลการรายงานลง log (ตัวช่วยติดตั้งเก็บไว้ที่ logs\app.log ดูได้จากเมนู 3)
+ *
+ * เดิมทุกความผิดพลาดถูกกลืนด้วย catch เปล่าๆ เวลาข้อมูลไม่ขึ้นในชีตจึงไล่ไม่ได้เลย
+ * ว่าเป็นเพราะยังไม่ถึงรอบส่ง ไม่มีรหัสสถานบริการ หรือส่งแล้วปลายทางปฏิเสธ
+ *
+ * ไม่มีข้อมูลผู้ป่วยหรือรหัสผ่านในข้อความ log เหล่านี้
+ */
+function logRegistry(message: string): void {
+  console.log(`[registry] ${new Date().toISOString()} ${message}`);
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // ต้องเข้าสู่ระบบก่อน ซึ่งแปลว่าตั้งค่าฐานข้อมูล HOSxP สำเร็จแล้วโดยปริยาย
   // เพราะการล็อกอินอ่านบัญชีเจ้าหน้าที่จากตาราง officer ในฐานข้อมูลนั้น
@@ -60,7 +72,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (record.consent && version && record.version !== version) {
       try {
         const info = await getHospitalInfo();
+        if (!info.code) {
+          // เดิมเงียบสนิทตรงนี้ ทำให้เครื่องที่ opdconfig ไม่มีรหัสสถานบริการ
+          // ไม่เคยรายงานเลยโดยไม่มีใครรู้ว่าทำไม
+          logRegistry(`ข้ามการรายงาน: ไม่พบรหัสสถานบริการในตาราง opdconfig`);
+        }
         if (info.code) {
+          logRegistry(`กำลังรายงานเวอร์ชันใหม่ ${record.version || "(ไม่เคยรายงาน)"} -> ${version}`);
           await sendToRegistry({
             hospitalCode: info.code,
             hospitalName: info.name,
@@ -70,9 +88,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             sentAt: new Date().toISOString(),
           });
           saveConsent(true, version, new Date().toISOString());
+          logRegistry(`รายงานสำเร็จ (เวอร์ชัน ${version})`);
         }
-      } catch {
+      } catch (error: any) {
         // ส่งไม่ได้ก็ไม่บันทึกเวอร์ชัน จะได้ลองใหม่คราวหน้าที่เปิดโปรแกรม
+        logRegistry(`รายงานไม่สำเร็จ: ${error?.message || error}`);
       }
     }
 
@@ -107,9 +127,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       version,
       sentAt: new Date().toISOString(),
     })
-      .then(() => saveConsent(true, version, new Date().toISOString()))
-      .catch(() => {
+      .then(() => {
+        saveConsent(true, version, new Date().toISOString());
+        logRegistry(`รายงานครั้งแรกสำเร็จ (เวอร์ชัน ${version || "(ไม่ทราบ)"})`);
+      })
+      .catch((error: any) => {
         // ส่งไม่สำเร็จก็ปล่อยไว้ ไม่ต้องแจ้งผู้ใช้ เพราะจะลองใหม่ให้เองรอบหน้า
+        logRegistry(`รายงานครั้งแรกไม่สำเร็จ: ${error?.message || error}`);
       });
 
     return res.status(200).json({ message: "บันทึกความยินยอมแล้ว ขอบคุณครับ" });
