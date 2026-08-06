@@ -19,6 +19,10 @@ $LATEST_API   = "https://api.github.com/repos/$REPO/releases/latest"
 $APP_ZIP_NAME = 'ndp-kit.zip'
 # ที่อยู่สำรอง ใช้เมื่อถาม API ไม่ได้เท่านั้น (ดูเหตุผลที่ Invoke-Install)
 $APP_URL      = "https://github.com/$REPO/releases/latest/download/$APP_ZIP_NAME"
+# ไฟล์สำหรับติดตั้งแบบไม่ผ่าน GitHub (เมนู 6) ตั้งชื่อไม่ให้ซ้ำกับ $APP_ZIP_NAME
+# โดยตั้งใจ เพราะไฟล์ชื่อ ndp-kit.zip ที่ค้างอยู่ข้างตัวช่วยติดตั้งจะถูกลบทิ้งเสมอ
+# (ดูเหตุผลที่ Invoke-Install) ถ้าใช้ชื่อเดียวกันจะกลายเป็นเปิดกับดักเดิมกลับมา
+$OFFLINE_ZIP_NAME = 'ndp-kit-offline.zip'
 $NODE_VER     = 'v24.19.0'
 $NODE_ZIP     = "node-$NODE_VER-win-x64.zip"
 $NODE_URL     = "https://nodejs.org/dist/$NODE_VER/$NODE_ZIP"
@@ -251,51 +255,104 @@ function Get-InstalledVersion {
   return ''
 }
 
+# อ่านเลขเวอร์ชันจากไฟล์ zip โดยไม่ต้องแตกไฟล์ออกมาก่อน
+#
+# ใช้ตอนติดตั้งจากไฟล์ที่ถือมาเอง เพื่อให้ผู้ดูแลเห็นก่อนกดยืนยันว่าไฟล์ในมือ
+# เป็นเวอร์ชันอะไรกันแน่ - เป็นด่านกันไม่ให้เอาไฟล์เก่าไปทับของใหม่โดยไม่รู้ตัว
+# ซึ่งเป็นปัญหาเดียวกับที่ทำให้ต้องเลิกรับไฟล์ ndp-kit.zip ข้างตัวช่วยติดตั้ง
+function Get-ZipVersion($zipPath) {
+  try {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+    try {
+      $entry = $archive.GetEntry('version.txt')
+      if (-not $entry) { return '' }
+      $reader = New-Object System.IO.StreamReader($entry.Open())
+      try { return $reader.ReadToEnd().Trim() } finally { $reader.Dispose() }
+    } finally { $archive.Dispose() }
+  } catch {
+    return ''
+  }
+}
+
 # ----------------------------------------------------------------- ติดตั้ง
+#
+# $LocalZip ว่าง = ติดตั้งตามปกติ ดาวน์โหลดเวอร์ชันล่าสุดจาก GitHub (เมนู 1)
+# $LocalZip มีค่า = ติดตั้งจากไฟล์ที่ผู้ดูแลถือมาเอง (เมนู 6) ใช้เมื่อ GitHub
+# ใช้ไม่ได้ หรือเครื่องนั้นออกอินเทอร์เน็ตไม่ได้ ที่เหลือทำเหมือนกันทุกขั้นตอน
 function Invoke-Install {
+  param([string]$LocalZip = '')
+
   Head "ขั้นตอนที่ 1/5 : เตรียม Node.js"
   Move-OldInstall
   if (-not (Test-Path $INSTALL_DIR)) { New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null }
   if (-not (Ensure-Node)) { Pause-Back; return }
 
-  Head 'ขั้นตอนที่ 2/5 : ดาวน์โหลดตัวโปรแกรม'
   $zip = Join-Path $env:TEMP $APP_ZIP_NAME
 
-  # ตัวโปรแกรมดาวน์โหลดใหม่ทุกครั้งเสมอ ไม่รับไฟล์ที่วางไว้ในเครื่องอีกต่อไป
-  #
-  # เดิมรองรับไว้เพื่อติดตั้งแบบออฟไลน์ แต่กลายเป็นกับดัก เพราะไฟล์เก่าที่ค้างอยู่
-  # ข้างตัวช่วยติดตั้งจะถูกหยิบมาใช้ทุกครั้ง เครื่องนั้นจึงติดอยู่กับเวอร์ชันเก่าถาวร
-  # โดยไม่มีอะไรบอกผู้ใช้ว่าทำไมกดอัปเดตแล้วไม่ได้ตัวใหม่
-  $stale = Find-LocalFile $APP_ZIP_NAME
-  if ($stale) {
-    Warn 'พบไฟล์ ndp-kit.zip เก่าค้างอยู่ข้างตัวช่วยติดตั้ง - ไม่ใช้แล้วและกำลังลบทิ้ง'
-    try { Remove-Item $stale -Force; Ok 'ลบไฟล์เก่าเรียบร้อย' } catch { Warn 'ลบไม่สำเร็จ - ลบเองได้ ไฟล์นี้ไม่ถูกใช้แล้ว' }
-  }
+  if ($LocalZip) {
+    Head 'ขั้นตอนที่ 2/5 : ใช้ไฟล์โปรแกรมที่เตรียมมา'
+    Step "ไฟล์ : $LocalZip"
+    $inZip = Get-ZipVersion $LocalZip
+    if ($inZip) { Ok "ไฟล์นี้เป็นเวอร์ชัน $inZip" }
+    else { Warn 'อ่านเลขเวอร์ชันในไฟล์ไม่ได้ - ไฟล์อาจไม่ใช่แพ็กเกจของ NDP-Kit' }
 
-  # ถามเลขเวอร์ชันล่าสุดก่อน แล้วโหลดจาก URL ที่ระบุเลขเวอร์ชันลงไปตรงๆ
-  #
-  # URL กลาง releases/latest/download/... ใช้ที่อยู่เดียวกันทุกเวอร์ชัน แคชระหว่างทาง
-  # จึงคืนไฟล์เก่าที่เคยโหลดผ่านที่อยู่เดียวกันนี้มาก่อนได้ เกิดขึ้นจริงแล้วเมื่อ
-  # 5 ส.ค. 2569 ตอนอัปเดตจากหน้าเว็บ กดแล้วได้ไฟล์เวอร์ชันเดิมกลับมาโดยไม่มีอะไรฟ้อง
-  # ถ้าถาม API ไม่ได้ก็ถอยไปใช้ URL กลางเหมือนเดิม ดีกว่าติดตั้งไม่ได้เลย
-  $url = $APP_URL
-  try {
-    $rel = Invoke-RestMethod $LATEST_API -TimeoutSec 30 -Headers @{ 'User-Agent' = 'ndp-kit-setup' }
-    if ($rel.tag_name) {
-      $url = "https://github.com/$REPO/releases/download/$($rel.tag_name)/$APP_ZIP_NAME"
-      Step "  เวอร์ชันล่าสุดคือ $($rel.tag_name)"
+    $now = Get-InstalledVersion
+    if ($now) { Step "เครื่องนี้ติดตั้งไว้ : $now" }
+    Write-Host ''
+    if ((Read-Host '  พิมพ์ y แล้ว Enter เพื่อติดตั้งไฟล์นี้') -ne 'y') {
+      Warn 'ยกเลิกแล้ว ไม่มีอะไรถูกเปลี่ยน'
+      Pause-Back; return
     }
-  } catch {
-    Warn 'ถามเลขเวอร์ชันล่าสุดไม่ได้ - จะโหลดจากที่อยู่กลางแทน'
-  }
+    try {
+      Copy-Item $LocalZip $zip -Force
+    } catch {
+      Err "อ่านไฟล์ไม่สำเร็จ: $($_.Exception.Message)"
+      Pause-Back; return
+    }
+  } else {
+    Head 'ขั้นตอนที่ 2/5 : ดาวน์โหลดตัวโปรแกรม'
 
-  if (-not (Get-RemoteFile $url $zip 'ตัวโปรแกรมเวอร์ชันล่าสุด')) {
-    Step ''
-    Step 'ตรวจสอบว่าเครื่องนี้เข้าอินเทอร์เน็ตได้ และเปิดเข้า github.com ได้'
-    Step 'แล้วลองใหม่อีกครั้ง'
-    Pause-Back; return
+    # ตัวโปรแกรมดาวน์โหลดใหม่ทุกครั้งเสมอ ไม่รับไฟล์ที่วางไว้ในเครื่องอีกต่อไป
+    #
+    # เดิมรองรับไว้เพื่อติดตั้งแบบออฟไลน์ แต่กลายเป็นกับดัก เพราะไฟล์เก่าที่ค้างอยู่
+    # ข้างตัวช่วยติดตั้งจะถูกหยิบมาใช้ทุกครั้ง เครื่องนั้นจึงติดอยู่กับเวอร์ชันเก่าถาวร
+    # โดยไม่มีอะไรบอกผู้ใช้ว่าทำไมกดอัปเดตแล้วไม่ได้ตัวใหม่
+    #
+    # การติดตั้งแบบออฟไลน์ย้ายไปอยู่เมนู 6 แทน ซึ่งต้องเลือกเองและใช้ไฟล์คนละชื่อ
+    # จึงไม่มีทางเกิดขึ้นโดยที่ผู้ใช้ไม่ได้ตั้งใจ
+    $stale = Find-LocalFile $APP_ZIP_NAME
+    if ($stale) {
+      Warn 'พบไฟล์ ndp-kit.zip เก่าค้างอยู่ข้างตัวช่วยติดตั้ง - ไม่ใช้แล้วและกำลังลบทิ้ง'
+      try { Remove-Item $stale -Force; Ok 'ลบไฟล์เก่าเรียบร้อย' } catch { Warn 'ลบไม่สำเร็จ - ลบเองได้ ไฟล์นี้ไม่ถูกใช้แล้ว' }
+    }
+
+    # ถามเลขเวอร์ชันล่าสุดก่อน แล้วโหลดจาก URL ที่ระบุเลขเวอร์ชันลงไปตรงๆ
+    #
+    # URL กลาง releases/latest/download/... ใช้ที่อยู่เดียวกันทุกเวอร์ชัน แคชระหว่างทาง
+    # จึงคืนไฟล์เก่าที่เคยโหลดผ่านที่อยู่เดียวกันนี้มาก่อนได้ เกิดขึ้นจริงแล้วเมื่อ
+    # 5 ส.ค. 2569 ตอนอัปเดตจากหน้าเว็บ กดแล้วได้ไฟล์เวอร์ชันเดิมกลับมาโดยไม่มีอะไรฟ้อง
+    # ถ้าถาม API ไม่ได้ก็ถอยไปใช้ URL กลางเหมือนเดิม ดีกว่าติดตั้งไม่ได้เลย
+    $url = $APP_URL
+    try {
+      $rel = Invoke-RestMethod $LATEST_API -TimeoutSec 30 -Headers @{ 'User-Agent' = 'ndp-kit-setup' }
+      if ($rel.tag_name) {
+        $url = "https://github.com/$REPO/releases/download/$($rel.tag_name)/$APP_ZIP_NAME"
+        Step "  เวอร์ชันล่าสุดคือ $($rel.tag_name)"
+      }
+    } catch {
+      Warn 'ถามเลขเวอร์ชันล่าสุดไม่ได้ - จะโหลดจากที่อยู่กลางแทน'
+    }
+
+    if (-not (Get-RemoteFile $url $zip 'ตัวโปรแกรมเวอร์ชันล่าสุด')) {
+      Step ''
+      Step 'ตรวจสอบว่าเครื่องนี้เข้าอินเทอร์เน็ตได้ และเปิดเข้า github.com ได้'
+      Step 'แล้วลองใหม่อีกครั้ง'
+      Step 'ถ้า GitHub ใช้ไม่ได้ ให้ขอไฟล์ติดตั้งจากผู้ดูแลแล้วใช้เมนู 6 แทน'
+      Pause-Back; return
+    }
+    Ok 'ได้ไฟล์โปรแกรมเวอร์ชันล่าสุดแล้ว'
   }
-  Ok 'ได้ไฟล์โปรแกรมเวอร์ชันล่าสุดแล้ว'
 
   Head 'ขั้นตอนที่ 3/5 : ติดตั้งลงเครื่อง'
   $wasRunning = Stop-App
@@ -525,6 +582,29 @@ function Invoke-Uninstall {
   Pause-Back
 }
 
+# ติดตั้งจากไฟล์ที่ผู้ดูแลถือมาเอง - ทางออกเมื่อ GitHub ใช้ไม่ได้
+#
+# มีไว้เพราะเจอมาแล้วจริงเมื่อ 6 ส.ค. 2569: GitHub Actions ล่ม แพ็กเกจของเวอร์ชัน
+# ใหม่จึงไม่ถูกสร้าง ทั้งปุ่มอัปเดตในโปรแกรมและเมนู 1 เลยหาเวอร์ชันใหม่ไม่เจอทั้งคู่
+# เพราะทั้งสองทางถาม releases/latest ที่เดียวกัน ตอนนั้นไม่มีทางลงเวอร์ชันใหม่เลย
+# นอกจากรอ ทั้งที่ไฟล์พร้อมอยู่ในมือแล้ว
+function Invoke-InstallOffline {
+  Head 'ติดตั้งจากไฟล์ที่เตรียมมา'
+  $file = Find-LocalFile $OFFLINE_ZIP_NAME
+  if (-not $file) {
+    Warn "ไม่พบไฟล์ $OFFLINE_ZIP_NAME ในโฟลเดอร์เดียวกับตัวช่วยติดตั้ง"
+    Step "  วางไฟล์ชื่อ $OFFLINE_ZIP_NAME ไว้ข้างไฟล์นี้ แล้วเลือกเมนู 6 อีกครั้ง"
+    Step '  หรือพิมพ์ที่อยู่ไฟล์เต็มๆ ลงไปด้านล่างก็ได้'
+    Write-Host ''
+    $typed = (Read-Host '  ที่อยู่ไฟล์ (เว้นว่างไว้เพื่อยกเลิก)')
+    if ($typed) { $typed = $typed.Trim().Trim('"') }
+    if (-not $typed) { Warn 'ยกเลิกแล้ว ไม่มีอะไรถูกเปลี่ยน'; Pause-Back; return }
+    if (-not (Test-Path $typed)) { Err 'ไม่พบไฟล์ตามที่อยู่ที่พิมพ์มา'; Pause-Back; return }
+    $file = $typed
+  }
+  Invoke-Install -LocalZip $file
+}
+
 # ------------------------------------------------------------------- เมนู
 while ($true) {
   Head "$APP_NAME - ตัวช่วยติดตั้ง"
@@ -539,6 +619,7 @@ while ($true) {
   Write-Host '  [3] ดูสถานะและ log'
   Write-Host '  [4] เริ่ม / หยุด โปรแกรม'
   Write-Host '  [5] ถอนการติดตั้ง'
+  Write-Host '  [6] ติดตั้งจากไฟล์ที่เตรียมมา (ใช้เมื่อโหลดจาก GitHub ไม่ได้)'
   Write-Host '  [0] ออก'
   Write-Host ''
   switch (Read-Host '  เลือกหมายเลข แล้วกด Enter') {
@@ -547,6 +628,7 @@ while ($true) {
     '3' { Invoke-Status }
     '4' { Invoke-Toggle }
     '5' { Invoke-Uninstall }
+    '6' { Invoke-InstallOffline }
     '0' { exit 0 }
     default { }
   }
