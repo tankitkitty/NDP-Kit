@@ -5,7 +5,9 @@ import Link from "next/link";
 import { GetServerSideProps } from "next";
 import { getSession } from "../lib/session";
 import { getHospitalName } from "../lib/db";
-import Logo from "../components/Logo";
+import BrandLogo from "../components/BrandLogo";
+
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const session = getSession(context.req);
@@ -20,6 +22,7 @@ export default function Login({ hospitalName }: { hospitalName: string }) {
   const router = useRouter();
   const [loginname, setLoginname] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -31,6 +34,7 @@ export default function Login({ hospitalName }: { hospitalName: string }) {
     }
 
     setSubmitting(true);
+    setMessage(null);
     try {
       const res = await fetch("/api/login", {
         method: "POST",
@@ -51,56 +55,79 @@ export default function Login({ hospitalName }: { hospitalName: string }) {
   }
 
   return (
-    <div className="container">
+    <div className="login-page">
       <Head>
-        <title>เข้าสู่ระบบ - NDP Kit</title>
+        <title>เข้าสู่ระบบ - NDP-Kit</title>
       </Head>
-      <div className="page-card" style={{ maxWidth: 420, margin: "80px auto" }}>
-        <div className="toolbar" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-          {hospitalName ? (
-            <span className="user-pill">
-              <span aria-hidden="true">🏥</span>
-              {hospitalName}
-            </span>
-          ) : (
-            <span />
-          )}
-          <Link href="/settings" className="button-ghost">
-            ตั้งค่าการเชื่อมต่อ
-          </Link>
+
+      <div className="login-card">
+        {/* ชื่อโปรแกรมกับคำอธิบายอยู่ในไฟล์โลโก้แล้ว ไม่เขียนซ้ำตรงนี้
+            (ถ้าไฟล์โลโก้หาย BrandLogo จะเติมชื่อให้เองจากตัวสำรอง) */}
+        <div className="login-brand">
+          <BrandLogo variant="light" width={300} />
         </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginBottom: 8 }}>
-          <Logo size={56} />
-          <div style={{ textAlign: "center" }}>
-            <h1 className="page-title" style={{ fontSize: "1.8rem", marginBottom: 4 }}>NDP Kit</h1>
-            <p className="brand-subtitle" style={{ margin: 0 }}>เข้าสู่ระบบเพื่อดำเนินการต่อ</p>
+
+        {hospitalName ? (
+          <div className="login-hospital">
+            <span aria-hidden="true">🏥</span>
+            <span>{hospitalName}</span>
           </div>
-        </div>
-        <form className="grid-form" onSubmit={handleSubmit} style={{ marginTop: 28 }}>
+        ) : null}
+
+        <form className="login-form" onSubmit={handleSubmit}>
           <div className="label-group">
-            <label>Username</label>
+            <label htmlFor="loginname">ชื่อผู้ใช้</label>
             <input
+              id="loginname"
               className="input-field"
               value={loginname}
               onChange={(e) => setLoginname(e.target.value)}
+              autoComplete="username"
               autoFocus
             />
           </div>
+
           <div className="label-group">
-            <label>Password</label>
-            <input
-              className="input-field"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <label htmlFor="password">รหัสผ่าน</label>
+            {/* ปุ่มดูรหัสผ่านช่วยลดการใส่ผิดซ้ำๆ ซึ่งสำคัญขึ้นมากตั้งแต่มีการระงับ
+                การเข้าสู่ระบบ 15 นาทีเมื่อใส่ผิดครบ 10 ครั้ง */}
+            <div className="login-password">
+              <input
+                id="password"
+                className="input-field"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                className="login-eye"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                title={showPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+              >
+                {showPassword ? "ซ่อน" : "แสดง"}
+              </button>
+            </div>
           </div>
-          <button className="button-primary" type="submit" disabled={submitting}>
+
+          <button className="button-primary login-submit" type="submit" disabled={submitting}>
             {submitting ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
           </button>
         </form>
-        {message ? <div className="status-message">{message}</div> : null}
+
+        {message ? <div className="status-message status-error login-message">{message}</div> : null}
+
+        <div className="login-footer">
+          <Link href="/settings" className="login-link">
+            ตั้งค่าการเชื่อมต่อฐานข้อมูล
+          </Link>
+          {APP_VERSION ? <span className="login-version">{APP_VERSION}</span> : null}
+        </div>
       </div>
+
+      <p className="login-note">ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับที่เข้าโปรแกรม HOSxP</p>
     </div>
   );
 }

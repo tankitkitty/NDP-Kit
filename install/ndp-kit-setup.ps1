@@ -1,5 +1,5 @@
 ﻿# =============================================================================
-#  NDP Kit - ตัวช่วยติดตั้งสำหรับหน่วยบริการ (รันด้วย Node.js ไม่ใช้ Docker)
+#  NDP-Kit - ตัวช่วยติดตั้งสำหรับหน่วยบริการ (รันด้วย Node.js ไม่ใช้ Docker)
 #
 #  ไฟล์นี้ต้องบันทึกเป็น UTF-8 พร้อม BOM เสมอ เพราะ Windows PowerShell 5.1 จะอ่าน
 #  ไฟล์ที่ไม่มี BOM เป็นรหัส ANSI แล้วภาษาไทยจะเพี้ยนทั้งไฟล์
@@ -9,7 +9,7 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest เร็วขึ้นมากเมื่อไม่วาดแถบ
 
-$APP_NAME     = 'NDP Kit'
+$APP_NAME     = 'NDP-Kit'
 $INSTALL_DIR  = 'C:\NDP-Kit'
 # ชื่อโฟลเดอร์เดิมก่อนเปลี่ยนมาใช้ขีดกลาง เครื่องที่ติดตั้งไว้ก่อนหน้านี้จะถูกย้ายมา
 # ให้อัตโนมัติตอนกดเมนู 1 (ดู Move-OldInstall) จะได้ไม่เกิดสองชุดแย่งพอร์ตกัน
@@ -410,8 +410,11 @@ sh.Run """" & base & "start.cmd""", 0, False
   # เพราะถ้าเครื่องไปต่อ Wi-Fi สาธารณะจะกลายเป็นเปิดให้คนนอกเข้าถึงข้อมูลผู้ป่วย
   Step "กำลังเปิดพอร์ต $port ใน Windows Firewall (เฉพาะเครือข่ายในหน่วยงาน) ..."
   try {
+    # ลบชื่อเดิมที่เคยใช้ก่อนเปลี่ยนมาใช้ขีดกลางด้วย ไม่งั้นเครื่องที่เคยติดตั้งไว้
+    # จะเหลือกฎเก่าค้างอยู่อีกอันโดยไม่มีใครลบให้
     $null = netsh advfirewall firewall delete rule name="NDP Kit" 2>&1
-    $null = netsh advfirewall firewall add rule name="NDP Kit" dir=in action=allow `
+    $null = netsh advfirewall firewall delete rule name="NDP-Kit" 2>&1
+    $null = netsh advfirewall firewall add rule name="NDP-Kit" dir=in action=allow `
       protocol=TCP localport=$port profile=private,domain 2>&1
     if ($LASTEXITCODE -eq 0) { Ok 'เปิดพอร์ตให้เครื่องอื่นในหน่วยงานเข้าใช้ได้แล้ว' }
     else { Warn "เปิดพอร์ตไม่สำเร็จ - เครื่องอื่นอาจเข้าไม่ได้ (เปิดเองได้ที่ Windows Firewall พอร์ต $port)" }

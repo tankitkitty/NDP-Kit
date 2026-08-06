@@ -88,7 +88,7 @@ git diff --cached --name-only | grep -E 'dbconfig|session-secret|\.env' || echo 
 git commit -m "อธิบายสั้นๆ ว่าเวอร์ชันนี้แก้/เพิ่มอะไร"
 
 # 5) ตั้ง tag เวอร์ชันใหม่ (annotated tag)
-git tag -a v1.1.0 -m "NDP Kit v1.1.0 - สรุปสิ่งที่เปลี่ยน"
+git tag -a v1.1.0 -m "NDP-Kit v1.1.0 - สรุปสิ่งที่เปลี่ยน"
 
 # 6) push ทั้ง commit และ tag ขึ้น GitHub
 git push origin master

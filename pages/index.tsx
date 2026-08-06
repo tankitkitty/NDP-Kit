@@ -5,6 +5,7 @@ import { getHospitalName } from "../lib/db";
 import Layout from "../components/Layout";
 import UpdateBanner from "../components/UpdateBanner";
 import ConsentDialog from "../components/ConsentDialog";
+import BrandLogo from "../components/BrandLogo";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const session = getSession(context.req);
@@ -21,11 +22,13 @@ export default function Home({ loginname, hospitalName }: { loginname: string; h
       <ConsentDialog />
       <UpdateBanner />
       <div className="page-card">
-        <div className="brand" style={{ marginBottom: 24 }}>
-          <div>
-            <h1 className="page-title" style={{ marginBottom: 0 }}>NDP Kit</h1>
-            <p className="brand-subtitle">จัดการรายการข้อมูลของคุณได้ในที่เดียว</p>
-          </div>
+        {/* โลโก้มีชื่อโปรแกรมกับคำอธิบายอยู่ในรูปแล้ว จึงไม่เขียนชื่อซ้ำอีก
+            เหลือแค่บอกว่าเปิดหน้านี้แล้วทำอะไรต่อได้บ้าง */}
+        <div className="home-hero">
+          <BrandLogo variant="light" width={300} />
+          <p className="home-hero-text">
+            เลือกงานที่ต้องการจากปุ่มด้านล่าง หรือจากเมนูด้านซ้าย
+          </p>
         </div>
         <div className="toolbar">
           {/* ปิดปุ่มนำเข้า 43 แฟ้มไว้ให้ตรงกับแถบเมนูซ้ายที่ปิดไปแล้ว ตัวหน้ายังอยู่ครบ

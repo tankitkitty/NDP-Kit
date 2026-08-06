@@ -3,7 +3,7 @@ import { ReactNode, useEffect, useState } from "react";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import Logo from "./Logo";
+import BrandLogo from "./BrandLogo";
 import VersionCheck from "./VersionCheck";
 import {
   ChecklistIcon,
@@ -75,13 +75,14 @@ export default function Layout({ title, loginname, hospitalName, fullWidth, chil
   return (
     <div className="app-shell">
       <Head>
-        <title>{title ? `${title} - NDP Kit` : "NDP Kit"}</title>
+        <title>{title ? `${title} - NDP-Kit` : "NDP-Kit"}</title>
       </Head>
 
       <aside className={`sidebar ${mobileOpen ? "open" : ""}`}>
+        {/* ใช้โลโก้แบบพื้นเข้มซึ่งมีแผ่นน้ำเงินมาในไฟล์อยู่แล้ว วางบนแถบเมนูได้ตรงๆ
+            ชื่อโปรแกรมอยู่ในรูปแล้วจึงไม่เขียนซ้ำ */}
         <div className="sidebar-brand">
-          <Logo size={40} />
-          <span className="sidebar-brand-name">NDP Kit</span>
+          <BrandLogo variant="dark" width={200} />
           {APP_VERSION ? <span className="sidebar-brand-version">{APP_VERSION}</span> : null}
         </div>
         {loginname ? (
@@ -123,7 +124,7 @@ export default function Layout({ title, loginname, hospitalName, fullWidth, chil
           <button className="hamburger-btn" onClick={() => setMobileOpen(true)} aria-label="เปิดเมนู">
             ☰
           </button>
-          <span className="topbar-title">NDP Kit</span>
+          <span className="topbar-title">NDP-Kit</span>
         </div>
         <div className="app-content" style={fullWidth ? { maxWidth: "none" } : undefined}>
           {children}

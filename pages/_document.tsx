@@ -7,6 +7,10 @@ export default function Document() {
         {/* ฟอนต์ Sarabun แบบ self-host (public/fonts) — ไม่พึ่ง Google Fonts
             เพื่อให้แสดงผลถูกต้องแม้เครื่องในหน่วยบริการไม่มีอินเทอร์เน็ต */}
         <link rel="stylesheet" href="/fonts/sarabun.css" />
+        {/* ไอคอนแท็บเบราว์เซอร์ ใช้แบบเฉพาะไอคอนไม่มีตัวหนังสือ เพราะขนาด 16px
+            ตัวหนังสือในโลโก้เต็มจะกลายเป็นรอยเปื้อนอ่านไม่ออก */}
+        <link rel="icon" href="/NDP-Kit-mark.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/NDP-Kit-mark.png" />
       </Head>
       <body>
         <Main />

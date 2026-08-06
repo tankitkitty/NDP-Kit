@@ -58,8 +58,8 @@ export function getSetupToken(): string {
     fs.writeFileSync(tokenFilePath, generated, { encoding: "utf-8", mode: 0o600 });
     cachedToken = generated;
     console.log(
-      `\n[NDP Kit] รหัสสำหรับตั้งค่าครั้งแรก: ${generated.slice(0, 4)}-${generated.slice(4)}\n` +
-        `[NDP Kit] ใช้กรอกที่หน้าตั้งค่าการเชื่อมต่อ เมื่อตั้งค่าฐานข้อมูลเสร็จแล้วรหัสนี้จะใช้ไม่ได้อีก\n`
+      `\n[NDP-Kit] รหัสสำหรับตั้งค่าครั้งแรก: ${generated.slice(0, 4)}-${generated.slice(4)}\n` +
+        `[NDP-Kit] ใช้กรอกที่หน้าตั้งค่าการเชื่อมต่อ เมื่อตั้งค่าฐานข้อมูลเสร็จแล้วรหัสนี้จะใช้ไม่ได้อีก\n`
     );
     return cachedToken;
   } catch {
@@ -67,7 +67,7 @@ export function getSetupToken(): string {
     // รหัสจะเปลี่ยนทุกครั้งที่รีสตาร์ท แต่ไม่มีทางเป็นค่าที่เดาได้
     cachedToken = generate();
     console.log(
-      `\n[NDP Kit] รหัสสำหรับตั้งค่าครั้งแรก: ${cachedToken.slice(0, 4)}-${cachedToken.slice(4)}\n`
+      `\n[NDP-Kit] รหัสสำหรับตั้งค่าครั้งแรก: ${cachedToken.slice(0, 4)}-${cachedToken.slice(4)}\n`
     );
     return cachedToken;
   }

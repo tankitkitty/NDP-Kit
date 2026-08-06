@@ -62,7 +62,7 @@ Google Sheet รับ POST ตรงๆ ไม่ได้ ต้องมี A
 ## โค้ดที่ต้องวางใน Apps Script
 
 ```javascript
-// รับข้อมูลทะเบียนหน่วยบริการจาก NDP Kit แล้วบันทึกลงชีต
+// รับข้อมูลทะเบียนหน่วยบริการจาก NDP-Kit แล้วบันทึกลงชีต
 // หน่วยบริการเดิมที่ส่งซ้ำจะถูกอัปเดตแถวเดิม ไม่เพิ่มแถวใหม่
 
 const SHEET_NAME = 'ทะเบียนหน่วยบริการ';
@@ -118,7 +118,7 @@ function writeRow_(sh, rowIndex, row) {
 // ตัวโปรแกรมใช้ doPost เท่านั้น ฟังก์ชันนี้มีไว้กันสับสนตอนคนเปิดดูเฉยๆ
 function doGet() {
   return ContentService
-    .createTextOutput('NDP Kit registry: พร้อมรับข้อมูล (ใช้ POST เท่านั้น)')
+    .createTextOutput('NDP-Kit registry: พร้อมรับข้อมูล (ใช้ POST เท่านั้น)')
     .setMimeType(ContentService.MimeType.TEXT);
 }
 
