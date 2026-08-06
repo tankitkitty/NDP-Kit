@@ -483,6 +483,72 @@ a.version-check-new:hover {
   }
 }
 
+/* คอลัมน์ลำดับของทุกตารางในโปรเจ็ค — แคบ ชิดขวา สีจาง
+   เพื่อให้เป็นตัวช่วยอ้างอิงแถว ไม่ใช่ข้อมูลที่แย่งความสนใจจากเนื้อหาจริง */
+.data-table th.seq-col,
+.data-table td.seq-col {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- แถบเลือกหน้าของตารางผลตรวจ ---- */
+.pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.pager-info {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.pager-buttons {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.pager-btn {
+  min-width: 32px;
+  padding: 4px 9px;
+  border: 1px solid var(--border-input);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.pager-btn:hover:not(:disabled) {
+  border-color: var(--button);
+  color: var(--button);
+}
+
+.pager-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pager-btn.active {
+  background: var(--button);
+  border-color: var(--button);
+  color: #fff;
+  font-weight: 700;
+}
+
+.pager-gap {
+  padding: 0 2px;
+  color: var(--muted);
+}
+
 /* ---- รายการรายงานแบบกระชับ ----
    หน่วยบริการที่ใช้จริงมีรายงานหลักร้อยใบ ถ้าใบละการ์ดจะเลื่อนหาไม่ไหว
    จึงทำเป็นแถวบรรทัดเดียว สูงประมาณ 44px เห็นได้ราว 15 ใบต่อหนึ่งหน้าจอ */

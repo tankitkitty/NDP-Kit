@@ -66,6 +66,36 @@ export default function Layout({ title, loginname, hospitalName, fullWidth, chil
     setMobileOpen(false);
   }, [router.pathname]);
 
+  /**
+   * หมดเวลาใช้งาน 8 ชั่วโมงแล้วให้พากลับไปหน้าเข้าสู่ระบบเอง
+   *
+   * ตัว session หมดอายุถูกต้องอยู่แล้วฝั่งเซิร์ฟเวอร์ (ดู lib/session.ts) และการ
+   * เปลี่ยนหน้าจะถูกพากลับไป /login ให้เอง แต่ถ้าผู้ใช้เปิดค้างหน้าเดิมไว้แล้วกดปุ่ม
+   * ในหน้านั้น API จะตอบ 401 ซึ่งแต่ละหน้าเอาไปแสดงเป็นข้อความสีแดงว่า
+   * "กรุณาเข้าสู่ระบบ" ค้างอยู่ตรงนั้น ผู้ใช้อ่านแล้วไม่รู้ว่าต้องทำอะไรต่อ
+   * และไม่รู้ว่างานที่เพิ่งกดไปสำเร็จหรือไม่
+   *
+   * ดักที่ fetch ตรงกลางทีเดียว เพราะถ้าไปไล่แก้ทุกหน้าที่เรียก API จะตกหล่นแน่นอน
+   * และหน้าใหม่ที่เขียนทีหลังก็จะลืมใส่อีก
+   */
+  useEffect(() => {
+    const original = window.fetch;
+    window.fetch = async (...args) => {
+      const response = await original(...args);
+      if (response.status === 401) {
+        const url = String(args[0] instanceof Request ? args[0].url : args[0]);
+        // หน้า login ไม่ได้ใช้ Layout อยู่แล้ว แต่กันไว้เผื่อ 401 จาก /api/login เอง
+        if (url.includes("/api/") && !url.includes("/api/login")) {
+          void router.replace("/login?expired=1");
+        }
+      }
+      return response;
+    };
+    return () => {
+      window.fetch = original;
+    };
+  }, [router]);
+
   async function handleLogout() {
     await fetch("/api/logout", { method: "POST" });
     router.push("/login");

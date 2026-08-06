@@ -162,16 +162,48 @@ export function isNewer(candidate: string, current: string): boolean {
  * เปลี่ยนหน้า จะชนเพดาน 60 ครั้งต่อชั่วโมงของผู้ใช้ที่ไม่ได้ล็อกอิน แล้ว GitHub จะ
  * ตอบ 403 ทำให้ขึ้นข้อความผิดพลาดทั้งที่ไม่มีอะไรเสีย
  *
- * ห้าองศานาทีถือว่าใหม่พอสำหรับการแจ้งว่ามีเวอร์ชันใหม่ ส่วนตอนกดปุ่มตรวจเองหรือ
- * กดอัปเดตจริงจะข้ามค่าที่พักไว้เสมอ (force) เพราะผู้ใช้ต้องการคำตอบสดตรงนั้น
+ * เพดานนั้นนับ "ต่อหมายเลข IP" ไม่ใช่ต่อเครื่อง หน่วยบริการที่ลงหลายเครื่องออกเน็ต
+ * ผ่าน IP สาธารณะเดียวกันจึงแชร์โควตาก้อนเดียวกันทั้งหน่วย ยิ่งลงหลายเครื่องยิ่ง
+ * หมดเร็ว จึงพักค่าไว้ยาว 6 ชั่วโมง — เวอร์ชันใหม่ออกไม่กี่ครั้งต่อสัปดาห์
+ * ไม่มีความจำเป็นต้องรู้ภายในห้านาที และผู้ใช้ยังกดปุ่มตรวจเองได้ทุกเมื่อ
  */
 let cachedTag = "";
 let cachedAt = 0;
-const TAG_CACHE_MS = 5 * 60 * 1000;
+const TAG_CACHE_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * เวลาที่ถามแล้วล้มเหลวครั้งล่าสุด — ใช้หยุดการถามซ้ำระหว่างที่ยังมีปัญหา
+ *
+ * เดิมเมื่อถามไม่สำเร็จจะไม่พักอะไรไว้เลย ทุกครั้งที่มีคนเปิดหน้าเว็บจึงยิงถาม
+ * ใหม่ทันที ซึ่งกลับหัวกลับหางกับสิ่งที่ควรทำ: ตอนโดน GitHub จำกัดเพราะถามถี่ไป
+ * ระบบจะยิ่งถามถี่ขึ้นอีก และไม่มีทางหลุดออกจากสภาพนั้นเองเลย
+ */
+let failedAt = 0;
+let failedMessage = "";
+const FAIL_BACKOFF_MS = 30 * 60 * 1000;
 
 export async function fetchLatestVersion(force = false): Promise<string> {
-  if (!force && cachedTag && Date.now() - cachedAt < TAG_CACHE_MS) return cachedTag;
+  if (!force) {
+    if (cachedTag && Date.now() - cachedAt < TAG_CACHE_MS) return cachedTag;
+    // ยังอยู่ในช่วงพักหลังถามไม่สำเร็จ — ตอบด้วยเหตุผลเดิมโดยไม่ไปรบกวน GitHub ซ้ำ
+    if (failedAt && Date.now() - failedAt < FAIL_BACKOFF_MS) {
+      throw new Error(failedMessage || "ตรวจสอบเวอร์ชันใหม่ไม่สำเร็จ");
+    }
+  }
 
+  try {
+    const tag = await requestLatestVersion();
+    failedAt = 0;
+    failedMessage = "";
+    return tag;
+  } catch (error: any) {
+    failedAt = Date.now();
+    failedMessage = String(error?.message || error);
+    throw error;
+  }
+}
+
+async function requestLatestVersion(): Promise<string> {
   const res = await fetch(LATEST_API, {
     headers: {
       Accept: "application/vnd.github+json",

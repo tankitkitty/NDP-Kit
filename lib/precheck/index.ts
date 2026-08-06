@@ -3,7 +3,6 @@ import deformedNo, { DEFORMED_FIX_SQL, DEFORMED_COUNT_SQL } from "./checks/defor
 import poCode from "./checks/poCode";
 import provider from "./checks/provider";
 import pttypeConfig from "./checks/pttypeConfig";
-import token from "./checks/token";
 import drugCatalog from "./checks/drugCatalog";
 import servicePrice from "./checks/servicePrice";
 import authCode from "./checks/authCode";
@@ -19,6 +18,8 @@ import diabetesScreening from "./checks/diabetesScreening";
 import cholesterolScreening from "./checks/cholesterolScreening";
 import anemiaScreening from "./checks/anemiaScreening";
 import ironSupplement from "./checks/ironSupplement";
+import drugTmtMissing from "./checks/drugTmtMissing";
+import drugIncome from "./checks/drugIncome";
 
 /** ทะเบียนการ์ดตรวจสอบทั้งหมด (ลำดับ = ลำดับที่แสดงบน dashboard) */
 export const CHECKS: CheckDefinition[] = [
@@ -26,7 +27,6 @@ export const CHECKS: CheckDefinition[] = [
   poCode,
   provider,
   pttypeConfig,
-  token,
   drugCatalog,
   servicePrice,
   authCode,
@@ -44,6 +44,8 @@ export const CHECKS: CheckDefinition[] = [
   cholesterolScreening,
   anemiaScreening,
   ironSupplement,
+  drugTmtMissing,
+  drugIncome,
 ];
 
 export function getCheck(id: string): CheckDefinition | undefined {

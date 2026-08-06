@@ -84,11 +84,14 @@ export default function ReportRunPage({
 
   async function exportExcel() {
     if (!result || result.rows.length === 0) return;
+    // เติมคอลัมน์ลำดับให้ตรงกับที่เห็นบนจอ (กติกาเดียวกันทั้งโปรเจ็ค)
+    const columns = [{ key: "__seq", label: "ลำดับ" }, ...result.columns];
+    const rows = result.rows.map((row, i) => ({ ...row, __seq: i + 1 }));
     try {
       const res = await fetch("/api/precheck/export", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: report.name, columns: result.columns, rows: result.rows }),
+        body: JSON.stringify({ filename: report.name, columns, rows }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -188,6 +191,8 @@ export default function ReportRunPage({
               <table className="data-table">
                 <thead>
                   <tr>
+                    {/* ทุกตารางในโปรเจ็คต้องมีคอลัมน์ลำดับ */}
+                    <th className="seq-col">ลำดับ</th>
                     {result.columns.map((c) => (
                       <th key={c.key}>{c.label}</th>
                     ))}
@@ -196,6 +201,7 @@ export default function ReportRunPage({
                 <tbody>
                   {result.rows.map((row, i) => (
                     <tr key={i}>
+                      <td className="seq-col">{i + 1}</td>
                       {result.columns.map((c) => (
                         <td key={c.key}>{String(row[c.key] ?? "")}</td>
                       ))}

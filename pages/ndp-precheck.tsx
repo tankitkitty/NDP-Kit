@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { GetServerSideProps } from "next";
+import Link from "next/link";
 import { useRouter } from "next/router";
 import { getSession } from "../lib/session";
 import { getHospitalName } from "../lib/db";
@@ -41,7 +42,6 @@ const QUERY_CARDS: CardMeta[] = [
   { id: "po-code", title: "รหัสไปรษณีย์ผู้ป่วยครบ 5 หลัก", description: "patient.po_code ที่ไม่ว่างต้องเป็นตัวเลข 5 หลักพอดี" },
   { id: "provider", title: "ข้อมูลบุคลากรทางการแพทย์ (PROVIDER)", description: "เลขใบประกอบวิชาชีพ / เลขบัตร ปชช. / provider_type ต้องครบ และกลุ่มวิชาชีพ (แพทย์ ทันตแพทย์ พยาบาล เภสัชกร ฯลฯ) ต้องมีรหัสสภาวิชาชีพ 01-08" },
   { id: "pttype-config", title: "การตั้งค่าสิทธิการรักษา (pttype)", description: "noexpire / export_eclaim / is_pttype_plan / default_request_funds / paidst='02' / price group (1=OFC/LGO, 2=UC/WEL)" },
-  { id: "token", title: "Token สำหรับส่งแฟ้ม 13 แฟ้ม", description: "sys_var (%token%) ต้องมีค่า และ NHSO token ต้องยังไม่หมดอายุ" },
   { id: "drug-catalog", title: "รหัสยาเทียบ Drug Catalog / TMT", description: "drugitems.sks_drug_code และราคา ต้องตรงกับ TMT/ราคาใน Drug Catalog รายการล่าสุด" },
   { id: "service-price", title: "ราคาที่คีย์จริงเทียบราคาตั้งต้น", description: "opitemrece.unitprice เทียบ drugitems.unitprice ในช่วงวันที่ที่เลือก", needsRange: true },
   { id: "auth-code", title: "เคสที่ยังไม่มีเลขปิดสิทธิ (Authorization)", description: "visit ในช่วงวันที่ที่เลือกที่ยังไม่มี auth_code — ต้องปิดสิทธิ/ออกใบแจ้งหนี้ก่อนส่งเคลม", needsRange: true },
@@ -57,6 +57,8 @@ const QUERY_CARDS: CardMeta[] = [
   { id: "condom", title: "บริการถุงยางพร้อมให้คำปรึกษา (ICD-10 Z30 + bill code)", description: "เคสถุงยางพร้อมให้คำปรึกษาต้องมีทั้ง ICD-10 Z30/Z300/Z304/Z309 และรายการค่าบริการ bill code 6201001/6201005/6201006/6201007", needsRange: true },
   { id: "anemia-screening", title: "คัดกรองโลหิตจางจากการขาดธาตุเหล็ก CBC หญิง 13-24 ปี (Z130)", description: "เคสหญิงอายุ 13-24 ปีที่ไม่ตั้งครรภ์ ต้องมี ICD-10 Z130 และมีอย่างใดอย่างหนึ่งใน TMLT 300034/300035 (แล็บ) หรือ CSMBS 30101/30102/13001", needsRange: true },
   { id: "iron-supplement", title: "บริการจ่ายยาเม็ดเสริมธาตุเหล็ก Ferrofolic (Z130 + รหัส TMT)", description: "เคสจ่ายยาเสริมธาตุเหล็กต้องมีทั้ง ICD-10 Z130 และรายการยาที่ตั้งรหัส TMT ตรงกับ GPU 10 รหัสที่ สปสช. กำหนด", needsRange: true },
+  { id: "drug-tmt-missing", title: "ยาที่ยังไม่ได้กำหนดรหัส TMT (สกส.)", description: "ยาที่ช่อง sks_drug_code ยังว่างอยู่จะส่งออกไป NDP ไม่ได้ เบิกไม่ได้ทั้งที่จ่ายยาไปจริง" },
+  { id: "drug-income", title: "ยาที่ยังไม่ใส่หมวดค่าบริการ หรือไม่ใช่รหัส 03", description: "รายการยาผู้ป่วยนอกควรตั้งหมวดค่าบริการเป็น 03 ถ้าตั้งเป็นหมวดอื่นยอดจะไปโผล่ผิดช่องในใบเบิก" },
 ];
 
 /**
@@ -77,8 +79,8 @@ const TABS: { key: string; label: string; hint: string; ids: string[] }[] = [
   {
     key: "master",
     label: "ข้อมูลตั้งต้นและการตั้งค่า",
-    hint: "ตั้งครั้งเดียวแล้วใช้ได้ตลอด — ทะเบียนผู้ป่วย บุคลากร สิทธิ token และรหัสแผนก",
-    ids: ["deformed-no", "po-code", "provider", "pttype-config", "token", "spclty-nhso-code"],
+    hint: "ตั้งครั้งเดียวแล้วใช้ได้ตลอด — ทะเบียนผู้ป่วย บุคลากร สิทธิ รหัสแผนก และทะเบียนยา",
+    ids: ["deformed-no", "po-code", "provider", "pttype-config", "spclty-nhso-code", "drug-tmt-missing", "drug-income"],
   },
   {
     key: "codes",
@@ -103,6 +105,37 @@ for (const tab of TABS) {
 }
 
 const DEFAULT_RANGE = getCurrentMonthRange();
+
+/** จำนวนแถวต่อหน้าของตารางผลตรวจ — เกินเท่านี้จึงเริ่มแบ่งหน้า */
+const PAGE_SIZE = 10;
+
+/**
+ * เลขหน้าที่จะแสดงบนแถบเลือกหน้า ย่อด้วย … เมื่อมีหลายหน้า
+ *
+ * แสดงหน้าแรก หน้าสุดท้าย และหน้ารอบๆ หน้าปัจจุบันเสมอ เพราะบางตารางมีเป็นร้อยแถว
+ * (ยาที่ยังไม่ได้ตั้งรหัส TMT 117 รายการ = 12 หน้า) ถ้าพิมพ์เลขทุกหน้าจะล้นบรรทัด
+ * คืน null แทนตำแหน่งที่ถูกย่อ เพื่อให้ผู้เรียกวาด … เอง
+ */
+function pageNumbers(current: number, total: number): (number | null)[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+
+  const pages = new Set<number>([1, total, current]);
+  if (current - 1 > 1) pages.add(current - 1);
+  if (current + 1 < total) pages.add(current + 1);
+
+  const sorted = Array.from(pages).sort((a, b) => a - b);
+  const out: (number | null)[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) out.push(null);
+    out.push(sorted[i]);
+  }
+  return out;
+}
+
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** ที่เก็บผลตรวจของรอบการใช้งานนี้ ให้กดกลับจากหน้ารายละเอียดแล้วผลยังอยู่ */
+const RESULT_CACHE_KEY = "ndp-kit-precheck-results";
 
 // สถานะการ์ดฝั่ง client
 type CardState = {
@@ -130,11 +163,6 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
   const [cards, setCards] = useState<Record<string, CardState>>({});
   const [runningAll, setRunningAll] = useState(false);
   const [activeTab, setActiveTab] = useState(TABS[0].key);
-  // แท็บย่อยของตารางผลตรวจในแต่ละการ์ด เก็บแยกกันด้วยคีย์ "<id การ์ด>#<ลำดับตาราง>"
-  const [sectionTab, setSectionTab] = useState<Record<string, string>>({});
-  // ตารางที่กำลังสร้างไฟล์ Excel อยู่ (คีย์เดียวกับ sectionTab) เพื่อกันกดซ้ำ
-  const [exportingKey, setExportingKey] = useState<string | null>(null);
-
   // เปิดแท็บตามที่ลิงก์ระบุมา เช่น /ndp-precheck?tab=master จากหน้า setup-checklist
   // ต้องทำใน effect ไม่ใช่ค่าเริ่มต้นของ useState เพราะ router.query ยังว่างตอน render แรก
   const router = useRouter();
@@ -143,11 +171,74 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
     if (typeof wanted === "string" && TABS.some((t) => t.key === wanted)) setActiveTab(wanted);
   }, [router.query.tab]);
 
+  /**
+   * คืนช่วงวันที่และผลตรวจเดิมเมื่อกดกลับมาจากหน้ารายละเอียด
+   *
+   * ผลตรวจบางหัวข้อใช้เวลาหลายวินาที ถ้ากลับมาแล้วต้องกด "ตรวจทั้งหมด" ใหม่ทุกครั้ง
+   * จะเสียเวลาซ้ำโดยไม่จำเป็น และผู้ใช้ที่ไล่ดูรายละเอียดทีละใบต้องรอใหม่ทุกใบ
+   *
+   * เก็บใน sessionStorage (ล้างเองเมื่อปิดเบราว์เซอร์) โดย **ตัดแถวข้อมูลออก**
+   * เหลือแต่หัวตารางและบทสรุป เพราะหน้ารวมใช้แค่สถานะกับข้อความสรุป ส่วนตารางจริง
+   * หน้ารายละเอียดตรวจใหม่เองอยู่แล้ว — ถ้าเก็บทุกแถวจะเกินโควตาของ sessionStorage
+   * ทันทีที่มีการ์ดที่คืนผลเป็นพันแถว แล้วจะกลายเป็นเก็บไม่ได้เลยสักใบ
+   */
+  useEffect(() => {
+    if (!router.isReady) return;
+    const q = router.query;
+    const qFrom = typeof q.from === "string" && DATE_PATTERN.test(q.from) ? q.from : "";
+    const qTo = typeof q.to === "string" && DATE_PATTERN.test(q.to) ? q.to : "";
+    if (qFrom) setFrom(qFrom);
+    if (qTo) setTo(qTo);
+
+    try {
+      const raw = sessionStorage.getItem(RESULT_CACHE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { from: string; to: string; cards: Record<string, CardState> };
+      // ผลเก่าของคนละช่วงวันที่ใช้ไม่ได้ ต้องทิ้ง ไม่งั้นตัวเลขบนการ์ดจะไม่ตรงกับวันที่ที่แสดง
+      const targetFrom = qFrom || saved.from;
+      const targetTo = qTo || saved.to;
+      if (saved.from !== targetFrom || saved.to !== targetTo) return;
+      if (!qFrom) setFrom(saved.from);
+      if (!qTo) setTo(saved.to);
+      setCards(saved.cards || {});
+    } catch {
+      // อ่านไม่ได้ก็แค่เริ่มต้นใหม่ ไม่ใช่เรื่องที่ต้องแจ้งผู้ใช้
+    }
+  }, [router.isReady, router.query]);
+
   // modal ยืนยันก่อนรัน UPDATE (แยกจากปุ่มอื่นเสมอ เพราะรันแล้วย้อนกลับไม่ได้)
   const [fixTarget, setFixTarget] = useState<CardMeta | null>(null);
   const [fixBackupAck, setFixBackupAck] = useState(false);
   const [fixRunning, setFixRunning] = useState(false);
   const [fixMessage, setFixMessage] = useState<{ text: string; error: boolean } | null>(null);
+
+  /**
+   * เก็บผลตรวจไว้ให้กดกลับมาแล้วยังอยู่
+   *
+   * ตัดแถวข้อมูลออกก่อนเก็บ (rows: []) เพราะหน้ารวมใช้แค่สถานะกับข้อความสรุป
+   * ส่วนตารางจริงหน้ารายละเอียดตรวจใหม่เอง — ถ้าเก็บทุกแถวจะเกินโควตาทันที
+   * ที่มีการ์ดคืนผลเป็นพันแถว แล้วจะเก็บไม่ได้เลยสักใบ
+   */
+  useEffect(() => {
+    if (Object.keys(cards).length === 0) return;
+    try {
+      const slim: Record<string, CardState> = {};
+      for (const [id, state] of Object.entries(cards)) {
+        // การ์ดที่กำลังตรวจอยู่ไม่ต้องเก็บสถานะ loading ไว้ ไม่งั้นกลับมาจะค้างที่ "กำลังตรวจ"
+        if (state.loading) continue;
+        slim[id] = {
+          ...state,
+          loading: false,
+          outcome: state.outcome
+            ? { ...state.outcome, sections: state.outcome.sections.map((s) => ({ ...s, rows: [] })) }
+            : null,
+        };
+      }
+      sessionStorage.setItem(RESULT_CACHE_KEY, JSON.stringify({ from, to, cards: slim }));
+    } catch {
+      // เก็บไม่ได้ (โควตาเต็ม/ปิด sessionStorage) ก็แค่ต้องตรวจใหม่เมื่อกลับมา
+    }
+  }, [cards, from, to]);
 
   function getState(id: string): CardState {
     return cards[id] || { loading: false, outcome: null, expanded: false, fetchError: null };
@@ -198,46 +289,6 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
     setRunningAll(false);
   }
 
-  /**
-   * ส่งออกตารางที่กำลังแสดงอยู่เป็นไฟล์ Excel
-   *
-   * ส่งเฉพาะแถวที่เห็นอยู่จริง (ผ่านการกรองด้วยแท็บย่อยแล้ว) ไม่ใช่ทั้งชุด
-   * เพราะที่ผู้ใช้กดคือ "เอารายการที่เห็นตรงหน้านี้ออกไป"
-   */
-  async function exportRows(
-    key: string,
-    filename: string,
-    columns: CheckColumn[],
-    rows: Record<string, unknown>[]
-  ) {
-    setExportingKey(key);
-    try {
-      const res = await fetch("/api/precheck/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename, columns, rows }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        alert(data.error || "ส่งออกไฟล์ไม่สำเร็จ");
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${filename}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      // ปล่อย object URL ทิ้ง ไม่งั้นไฟล์ค้างในหน่วยความจำจนกว่าจะปิดแท็บ
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch {
-      alert("เรียก API ไม่สำเร็จ");
-    } finally {
-      setExportingKey(null);
-    }
-  }
 
   async function executeFix() {
     if (!fixTarget) return;
@@ -264,151 +315,6 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
     }
   }
 
-  function renderSection(cardId: string, section: CheckSection, idx: number) {
-    // _alert / _warn เป็นคีย์พิเศษที่ฝั่ง check ใส่มาเพื่อขอให้เน้นแถวเป็นสีแดง (ผิดแน่ๆ)
-    // หรือสีเหลือง (น่าสงสัย ควรตรวจทาน) — ดู ROW_ALERT_KEY / ROW_WARN_KEY ใน
-    // lib/precheck/types.ts — ไม่ใช่คอลัมน์จริง จึงไม่ถูกวาดเป็นช่องในตาราง
-    const failRows = section.rows.filter((r) => r._alert);
-    const warnRows = section.rows.filter((r) => !r._alert && r._warn);
-    const passRows = section.rows.filter((r) => !r._alert && !r._warn);
-    const graded = failRows.length + warnRows.length > 0;
-
-    // ตารางที่ปนทั้งผ่านและไม่ผ่านจะยาวจนหาแถวที่ต้องแก้ไม่เจอ แม้จะเรียงแถวที่ผิดไว้บนสุด
-    // แล้วก็ตาม จึงแยกเป็นแท็บย่อยและตั้งค่าเริ่มต้นไว้ที่ "ไม่ผ่าน" เพราะเป็นสิ่งที่คนเปิด
-    // ดูรายละเอียดต้องการเห็นก่อนเสมอ
-    const subTabs = [
-      { key: "fail", label: `ไม่ผ่าน ${failRows.length}`, rows: failRows, cls: "subtab-fail" },
-      ...(warnRows.length > 0
-        ? [{ key: "warn", label: `ควรตรวจทาน ${warnRows.length}`, rows: warnRows, cls: "subtab-warn" }]
-        : []),
-      { key: "pass", label: `ผ่าน ${passRows.length}`, rows: passRows, cls: "subtab-pass" },
-      { key: "all", label: `ทั้งหมด ${section.rows.length}`, rows: section.rows, cls: "" },
-    ];
-    const tabKey = `${cardId}#${idx}`;
-    const activeSub = sectionTab[tabKey] || (failRows.length > 0 ? "fail" : warnRows.length > 0 ? "warn" : "all");
-    const shown = graded ? subTabs.find((t) => t.key === activeSub)?.rows || section.rows : section.rows;
-
-    // สรุปว่าที่ไม่ผ่านนั้นไม่ผ่านด้วยสาเหตุอะไรบ้าง อย่างละกี่ราย — ดูจากคอลัมน์ผลตรวจ
-    // ซึ่งทุก check ที่แบ่งผ่าน/ไม่ผ่านใช้ key เดียวกันคือ verdict
-    const hasVerdict = section.columns.some((c) => c.key === "verdict");
-    const reasons = new Map<string, number>();
-    if (hasVerdict) {
-      for (const r of [...failRows, ...warnRows]) {
-        const key = String(r.verdict || "ไม่ระบุสาเหตุ");
-        reasons.set(key, (reasons.get(key) || 0) + 1);
-      }
-    }
-
-    /**
-     * คอลัมน์ไหนควรให้ข้อความขึ้นบรรทัดใหม่ได้
-     *
-     * ตัดสินทั้งคอลัมน์ ไม่ใช่ทีละช่อง เพื่อให้ความกว้างของคอลัมน์คงที่ทุกแถว
-     * คอลัมน์สั้นๆ อย่างรหัส ราคา วันที่ ปล่อยให้อยู่บรรทัดเดียว จะได้ไม่ถูกบีบ
-     * จนขึ้นบรรทัดใหม่โดยไม่จำเป็น เหลือแต่คอลัมน์ข้อความยาว (ชื่อยา ชื่อคน ผลตรวจ)
-     * ที่ยอมให้ตัดบรรทัด
-     */
-    const wrapCols = new Set(
-      section.columns
-        .filter((c) => section.rows.some((r) => String(r[c.key] ?? "").length > 28))
-        .map((c) => c.key)
-    );
-
-    // ชื่อไฟล์เอาชื่อหัวข้อการ์ดนำหน้า จะได้รู้ว่าไฟล์ไหนมาจากการตรวจอะไรตอนเปิดทีหลัง
-    const cardTitle = QUERY_CARDS.find((c) => c.id === cardId)?.title || cardId;
-    const exportName = `${cardTitle}${section.title ? ` - ${section.title}` : ""}`;
-    const exportKey = `${cardId}#${idx}`;
-
-    return (
-      <div key={idx} style={{ marginTop: idx === 0 ? 0 : 16 }}>
-        <div className="precheck-section-head">
-          {section.title ? <div className="precheck-section-title">{section.title}</div> : <span />}
-          {shown.length > 0 ? (
-            <button
-              className="button-ghost precheck-small-btn"
-              onClick={() => exportRows(exportKey, exportName, section.columns, shown)}
-              disabled={exportingKey === exportKey}
-            >
-              {exportingKey === exportKey ? "กำลังสร้างไฟล์..." : "ส่งออก Excel"}
-            </button>
-          ) : null}
-        </div>
-
-        {graded ? (
-          <>
-            <div className="precheck-tally">
-              <span className="tally-pass">ผ่าน {passRows.length} ราย</span>
-              <span className="tally-fail">ไม่ผ่าน {failRows.length} ราย</span>
-              {warnRows.length > 0 ? <span className="tally-warn">ควรตรวจทาน {warnRows.length} ราย</span> : null}
-              <span className="tally-total">จากทั้งหมด {section.rows.length} ราย</span>
-            </div>
-            {reasons.size > 0 ? (
-              <div className="precheck-reasons">
-                {Array.from(reasons.entries())
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([reason, n]) => (
-                    <div key={reason}>
-                      • {reason} — <strong>{n.toLocaleString()}</strong> ราย
-                    </div>
-                  ))}
-              </div>
-            ) : null}
-            <div className="subtabs">
-              {subTabs.map((t) => (
-                <button
-                  key={t.key}
-                  className={`subtab ${t.cls} ${t.key === activeSub ? "active" : ""}`}
-                  onClick={() => setSectionTab((prev) => ({ ...prev, [tabKey]: t.key }))}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </>
-        ) : null}
-
-        {shown.length > 0 ? (
-          // สูง 480px ไม่ใช่ 360px แบบเดิม เพราะแถวที่มีข้อความยาวสูงกว่าหนึ่งบรรทัด
-          // ของเดิมจึงเห็นได้แค่สามสี่แถวแล้วต้องเลื่อนตลอด
-          <div className="table-wrap" style={{ maxHeight: 480, overflowY: "auto" }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  {section.columns.map((c) => (
-                    <th key={c.key}>{c.label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {/* ตารางที่บอกผลถูก/ผิดต้องติดสีพื้นทุกแถวตามกติกาของโปรเจ็ค แถวที่ถูกต้อง
-                    เป็นเขียวอ่อน ส่วนตารางอ้างอิงที่ไม่มีผลถูก/ผิด (graded = false) ปล่อยขาว */}
-                {shown.map((row, i) => (
-                  <tr
-                    key={i}
-                    className={
-                      row._alert ? "row-alert" : row._warn ? "row-warn" : graded ? "row-ok" : undefined
-                    }
-                  >
-                    {section.columns.map((c) => (
-                      <td key={c.key} className={wrapCols.has(c.key) ? "wrap" : undefined}>
-                        {row[c.key] === null || row[c.key] === undefined || row[c.key] === "" ? (
-                          <span style={{ color: "var(--muted)" }}>-</span>
-                        ) : (
-                          String(row[c.key])
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : graded ? (
-          <div className="precheck-note">ไม่มีรายการในกลุ่มนี้</div>
-        ) : null}
-        {section.note ? <div className="precheck-note">{section.note}</div> : null}
-      </div>
-    );
-  }
 
   function renderCard(meta: CardMeta) {
     const state = getState(meta.id);
@@ -442,48 +348,20 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
             <button className="button-ghost precheck-small-btn" onClick={() => runCheck(meta)} disabled={state.loading || runningAll}>
               {outcome ? "ตรวจซ้ำ" : "ตรวจ"}
             </button>
+            {/* รายละเอียดไปอยู่หน้าของตัวเอง ไม่กางต่อท้ายการ์ดแล้ว เพราะตารางบางหัวข้อ
+                มีเป็นร้อยแถวพร้อมคำแนะนำยาวๆ พอกางแล้วต้องเลื่อนผ่านทั้งหมดกว่าจะถึง
+                การ์ดใบถัดไป และกางหลายใบพร้อมกันแล้วหาไม่เจอว่าอ่านถึงไหน
+                พาช่วงวันที่ไปด้วยเพื่อให้หน้ารายละเอียดตรวจด้วยเงื่อนไขเดียวกัน */}
             {outcome && (outcome.sections.length > 0 || outcome.advice || outcome.error) ? (
-              <button className="button-ghost precheck-small-btn" onClick={() => patchState(meta.id, { expanded: !state.expanded })}>
-                {state.expanded ? "ซ่อนรายละเอียด" : "ดูรายละเอียด"}
-              </button>
+              <Link
+                className="button-ghost precheck-small-btn"
+                href={`/ndp-precheck/${encodeURIComponent(meta.id)}?from=${from}&to=${to}`}
+              >
+                ดูรายละเอียด →
+              </Link>
             ) : null}
           </div>
         </div>
-
-        {outcome && state.expanded ? (
-          <div className="precheck-card-body">
-            {outcome.error ? (
-              <div className="status-message status-error" style={{ marginBottom: 12 }}>
-                {outcome.error}
-              </div>
-            ) : null}
-            {outcome.sections.map((s, i) => renderSection(meta.id, s, i))}
-            {outcome.advice ? (
-              <div className="precheck-advice">
-                <div className="precheck-section-title">คำแนะนำการแก้ไข</div>
-                <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{outcome.advice}</p>
-              </div>
-            ) : null}
-            {/* ไม่แสดงบล็อก SQL แก้ไขบนหน้าแล้ว — ผู้ใช้งานจริงเป็นเจ้าหน้าที่เวชระเบียน
-                ไม่ได้รันคำสั่งเอง มีแต่ทำให้การ์ดยาวจนคำแนะนำที่ต้องอ่านจริงถูกดันตกไป
-                ส่วนหัวข้อที่ระบบรันแก้ให้ได้ ยังเหลือปุ่มยืนยัน ซึ่งจะโชว์คำสั่งใน
-                หน้าต่างยืนยันก่อนรันอยู่แล้ว */}
-            {outcome.canExecuteFix ? (
-              <div className="toolbar" style={{ marginTop: 12 }}>
-                <button
-                  className="button-primary precheck-small-btn"
-                  onClick={() => {
-                    setFixTarget(meta);
-                    setFixBackupAck(false);
-                    setFixMessage(null);
-                  }}
-                >
-                  รันคำสั่งแก้ไขจากระบบ...
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
       </div>
     );
   }

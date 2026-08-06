@@ -117,7 +117,14 @@ export default function Login({ hospitalName }: { hospitalName: string }) {
           </button>
         </form>
 
-        {message ? <div className="status-message status-error login-message">{message}</div> : null}
+        {message ? (
+          <div className="status-message status-error login-message">{message}</div>
+        ) : router.query.expired !== undefined ? (
+          // มาจากการถูกพากลับเพราะใช้งานครบ 8 ชั่วโมง ไม่ใช่ความผิดพลาด จึงไม่ใช้สีแดง
+          <div className="status-message login-message">
+            ใช้งานครบ 8 ชั่วโมงแล้ว กรุณาเข้าสู่ระบบอีกครั้ง
+          </div>
+        ) : null}
 
         <div className="login-footer">
           <Link href="/settings" className="login-link">
