@@ -62,12 +62,19 @@ Google Sheet รับ POST ตรงๆ ไม่ได้ ต้องมี A
 ## โค้ดที่ต้องวางใน Apps Script
 
 ```javascript
-// รับข้อมูลทะเบียนหน่วยบริการจาก NDP-Kit แล้วบันทึกลงชีต
-// หน่วยบริการเดิมที่ส่งซ้ำจะถูกอัปเดตแถวเดิม ไม่เพิ่มแถวใหม่
+// รับข้อมูลทะเบียนเครื่องที่ติดตั้ง NDP-Kit แล้วบันทึกลงชีต
+//
+// หนึ่งแถว = หนึ่งเครื่อง ไม่ใช่หนึ่งหน่วยบริการ เพราะ รพ.สต. หนึ่งแห่งลงได้หลายเครื่อง
+// ถ้าทับแถวด้วยรหัสสถานพยาบาลอย่างเดียว เครื่องในหน่วยเดียวกันจะทับกันเองจนนับไม่ได้
 
-const SHEET_NAME = 'ทะเบียนหน่วยบริการ';
-const HEADERS = ['วันเวลาที่รับ', 'รหัสสถานพยาบาล', 'ชื่อสถานพยาบาล', 'เวอร์ชัน', 'วันเวลาที่ส่ง'];
+const SHEET_NAME = 'ทะเบียนเครื่องที่ติดตั้ง';
+const HEADERS = [
+  'รหัสสถานพยาบาล', 'ชื่อสถานพยาบาล', 'ชื่อเครื่อง', 'เวอร์ชัน',
+  'วันที่ติดตั้ง', 'วันที่อัปเดตล่าสุด', 'รายงานครั้งแรก', 'รายงานล่าสุด', 'จำนวนครั้งที่รายงาน'
+];
+const TEXT = '@';
 const DATE_FORMAT = 'yyyy-mm-dd hh:mm:ss';
+const FORMATS = [[TEXT, TEXT, TEXT, TEXT, DATE_FORMAT, DATE_FORMAT, DATE_FORMAT, DATE_FORMAT, '0']];
 
 function getSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -78,7 +85,6 @@ function getSheet_() {
     sh.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold');
     sh.setFrozenRows(1);
   }
-
   return sh;
 }
 
@@ -90,7 +96,12 @@ function normalizeCode_(value) {
   return String(value == null ? '' : value).trim().replace(/^0+/, '');
 }
 
-/** แปลงข้อความเวลาแบบ ISO ให้เป็นวันที่จริง เพื่อให้ชีตแสดงผลอ่านง่ายและเรียง/กรองได้ */
+/** กุญแจของหนึ่งเครื่อง = รหัสสถานพยาบาล + ชื่อเครื่อง (ไม่สนตัวพิมพ์เล็กใหญ่) */
+function machineKey_(code, machine) {
+  return normalizeCode_(code) + '|' + String(machine == null ? '' : machine).trim().toLowerCase();
+}
+
+/** แปลงข้อความเวลาแบบ ISO ให้เป็นวันที่จริง เพื่อให้ชีตเรียง/กรองได้ */
 function toDate_(value) {
   if (!value) return '';
   const d = new Date(value);
@@ -109,7 +120,7 @@ function toDate_(value) {
  */
 function writeRow_(sh, rowIndex, row) {
   const range = sh.getRange(rowIndex, 1, 1, row.length);
-  range.setNumberFormats([[DATE_FORMAT, '@', '@', '@', DATE_FORMAT]]);
+  range.setNumberFormats(FORMATS);
   SpreadsheetApp.flush();
   range.setValues([row]);
 }
@@ -123,46 +134,79 @@ function doGet() {
 }
 
 function doPost(e) {
+  // ล็อกไว้ เพราะหลายเครื่องรายงานพร้อมกันได้ ถ้าอ่าน-เขียนซ้อนกันจะเกิดแถวซ้ำ
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
   try {
     const data = JSON.parse(e.postData.contents);
     const code = String(data.hospitalCode || '').trim();
-    const row = [
-      new Date(),
-      code,
-      data.hospitalName || '',
-      data.version || '',
-      toDate_(data.sentAt)
-    ];
+    const machine = String(data.machineName || '').trim();
+    const now = new Date();
 
     const sh = getSheet_();
+    const values = sh.getDataRange().getValues();
 
-    // หน่วยบริการเดิมส่งมาอีก (เช่น อัปเดตเวอร์ชัน) ให้ทับแถวเดิม
-    //
-    // เทียบด้วย normalizeCode_ เพื่อให้แถวเก่าที่เคยถูกเก็บเป็นตัวเลข (ศูนย์นำหน้าหาย
-    // ไปแล้ว) ยังจับคู่กับรหัสจริงได้ ไม่งั้นจะเกิดแถวซ้ำไปตลอดและแก้ย้อนหลังไม่ได้
-    let updated = false;
-    if (code) {
-      const values = sh.getDataRange().getValues();
-      for (let i = 1; i < values.length; i++) {
-        if (normalizeCode_(values[i][1]) === normalizeCode_(code)) {
-          writeRow_(sh, i + 1, row);
-          updated = true;
-          break;
-        }
+    // หาแถวของเครื่องนี้ (รหัสหน่วย + ชื่อเครื่อง)
+    let rowIndex = 0;
+    let firstSeen = now;
+    let count = 0;
+    const key = machineKey_(code, machine);
+    for (let i = 1; i < values.length; i++) {
+      if (machineKey_(values[i][0], values[i][2]) === key) {
+        rowIndex = i + 1;
+        firstSeen = values[i][6] || now;   // รายงานครั้งแรก คงค่าเดิมไว้เสมอ
+        count = Number(values[i][8]) || 0;
+        break;
       }
     }
-    if (!updated) writeRow_(sh, sh.getLastRow() + 1, row);
+
+    const row = [
+      code,
+      data.hospitalName || '',
+      machine,
+      data.version || '',
+      toDate_(data.installedAt),
+      toDate_(data.updatedAt),
+      firstSeen,
+      now,
+      count + 1
+    ];
+
+    writeRow_(sh, rowIndex || sh.getLastRow() + 1, row);
 
     return ContentService
-      .createTextOutput(JSON.stringify({ ok: true, updated: updated }))
+      .createTextOutput(JSON.stringify({ ok: true, updated: rowIndex > 0 }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService
       .createTextOutput(JSON.stringify({ ok: false, error: String(err) }))
       .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
 }
 ```
+
+---
+
+## วิธีดูข้อมูลที่ต้องการจากชีต
+
+> **โปรแกรมรายงานเฉพาะ 2 จังหวะ: ตอนติดตั้งครั้งแรก และตอนอัปเดตเวอร์ชันสำเร็จ**
+> ไม่ได้รายงานเป็นระยะ ดังนั้นชีตนี้ตอบได้ว่า "ติดตั้งไปแล้วกี่เครื่อง เวอร์ชันอะไร
+> ติดตั้ง/อัปเดตเมื่อไหร่" แต่**บอกไม่ได้ว่าเครื่องนั้นยังเปิดใช้อยู่จริงหรือเลิกใช้ไปแล้ว**
+> ตัวชี้วัดที่ใกล้เคียงที่สุดคือ "วันที่อัปเดตล่าสุด" — เครื่องที่ยังใช้งานอยู่มักอัปเดตตามเวอร์ชันใหม่
+
+ใส่สูตรเหล่านี้ในชีตใหม่ (สมมติชีตข้อมูลชื่อ `ทะเบียนเครื่องที่ติดตั้ง`)
+
+| อยากรู้ | สูตร |
+| --- | --- |
+| ติดตั้งไปแล้วทั้งหมดกี่เครื่อง | `=COUNTA('ทะเบียนเครื่องที่ติดตั้ง'!C2:C)` |
+| มีกี่ รพ.สต. | `=COUNTA(UNIQUE('ทะเบียนเครื่องที่ติดตั้ง'!A2:A))` |
+| แยกตามเวอร์ชัน | `=QUERY('ทะเบียนเครื่องที่ติดตั้ง'!A:I,"select D, count(C) group by D label count(C) 'จำนวนเครื่อง'",1)` |
+| หน่วยที่ลงหลายเครื่อง | `=QUERY('ทะเบียนเครื่องที่ติดตั้ง'!A:I,"select A, B, count(C) group by A, B having count(C) > 1",1)` |
+| เครื่องที่ยังใช้เวอร์ชันเก่า | กรองคอลัมน์ D ให้ไม่เท่ากับเวอร์ชันล่าสุด |
+| เครื่องที่ไม่ได้อัปเดตนาน (น่าจะเลิกใช้) | กรองคอลัมน์ F (วันที่อัปเดตล่าสุด) เก่ากว่าที่กำหนด |
+| ติดตั้งใหม่เดือนนี้ | กรองคอลัมน์ E (วันที่ติดตั้ง) |
 
 ---
 

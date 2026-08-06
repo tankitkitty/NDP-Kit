@@ -1,6 +1,7 @@
 import mysql from "mysql2/promise";
 import fs from "fs";
 import path from "path";
+import { readSecretJsonFile } from "./configSecurity";
 
 const configPath = path.join(process.cwd(), "data", "dbconfig.json");
 
@@ -31,13 +32,14 @@ export function parseDbConfig(body: any): DbConfig {
 
 export function readStoredConfig(): DbConfig | null {
   try {
-    if (!fs.existsSync(configPath)) return null;
-    const raw = fs.readFileSync(configPath, "utf-8");
-    return JSON.parse(raw) as DbConfig;
+    return readSecretJsonFile<DbConfig>(configPath);
   } catch {
     return null;
   }
 }
+
+let cachedConfig: DbConfig | null = null;
+let cachedStamp = "";
 
 function getConfig(): DbConfig {
   if (process.env.MYSQL_HOST) {
@@ -54,8 +56,21 @@ function getConfig(): DbConfig {
     throw new Error("Database config file not found: data/dbconfig.json");
   }
 
-  const raw = fs.readFileSync(configPath, "utf-8");
-  return JSON.parse(raw) as DbConfig;
+  // แคชค่าที่ถอดรหัสแล้วไว้ เพราะ getConfig ถูกเรียกทุกครั้งที่ query และการถอดรหัส
+  // ต้องเรียก PowerShell ซึ่งใช้เวลาหลักร้อยมิลลิวินาที — ล้างแคชเมื่อไฟล์ถูกแก้
+  const stat = fs.statSync(configPath);
+  const stamp = `${stat.mtimeMs}:${stat.size}`;
+  if (cachedConfig && cachedStamp === stamp) return cachedConfig;
+
+  const parsed = readSecretJsonFile<DbConfig>(configPath);
+  if (!parsed) {
+    throw new Error(
+      "อ่านไฟล์ตั้งค่าฐานข้อมูลไม่ได้ — ไฟล์อาจถูกเข้ารหัสไว้กับเครื่องอื่น ให้ตั้งค่าการเชื่อมต่อใหม่"
+    );
+  }
+  cachedConfig = parsed;
+  cachedStamp = stamp;
+  return parsed;
 }
 
 let pool: mysql.Pool | null = null;

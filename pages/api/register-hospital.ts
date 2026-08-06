@@ -3,6 +3,8 @@ import { getSession } from "../../lib/session";
 import { getHospitalInfo } from "../../lib/db";
 import {
   getAppVersion,
+  getMachineName,
+  getInstallDates,
   isRegistryEnabled,
   readConsent,
   saveConsent,
@@ -12,8 +14,9 @@ import {
 /**
  * แบบฟอร์มยินยอมส่งข้อมูลการใช้งาน และการรายงานไปยัง Google Sheet ของผู้พัฒนา
  *
- * ส่งเฉพาะรหัส/ชื่อสถานพยาบาล เวอร์ชันโปรแกรม และวันเวลาที่ส่ง ตามที่ระบุไว้
- * ในแบบฟอร์มยินยอม ไม่มีข้อมูลผู้ป่วยหรือข้อมูลส่วนบุคคลใดๆ
+ * ส่งเฉพาะรหัส/ชื่อสถานพยาบาล ชื่อเครื่องที่ติดตั้ง วันที่ติดตั้ง วันที่อัปเดต
+ * เวอร์ชันโปรแกรม และวันเวลาที่ส่ง ตามที่ระบุไว้ในแบบฟอร์มยินยอม
+ * ไม่มีข้อมูลผู้ป่วยหรือข้อมูลส่วนบุคคลใดๆ
  *
  * GET  -> บอกว่าต้องแสดงแบบฟอร์มไหม และถ้ายินยอมไว้แล้วกับเพิ่งอัปเดตเวอร์ชัน
  *         จะรายงานเวอร์ชันใหม่ให้เงียบๆ ตามความยินยอมเดิม
@@ -39,12 +42,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const info = await getHospitalInfo();
       return res.status(200).json({
         needConsent: true,
-        preview: { hospitalCode: info.code, hospitalName: info.name, version },
+        preview: {
+          hospitalCode: info.code,
+          hospitalName: info.name,
+          machineName: getMachineName(),
+          ...getInstallDates(),
+          version,
+        },
       });
     }
 
-    // ยินยอมไว้แล้วและเพิ่งอัปเดตเป็นเวอร์ชันใหม่ → รายงานซ้ำเงียบๆ ตามความยินยอมเดิม
-    // เพื่อให้ยอดการใช้งานแยกตามเวอร์ชันตรงกับความจริง ไม่ใช่ค้างอยู่ที่เวอร์ชันแรก
+    // รายงานซ้ำเงียบๆ ตามความยินยอมเดิม เฉพาะตอนที่เพิ่งอัปเดตเป็นเวอร์ชันใหม่สำเร็จ
+    // เท่านั้น (เทียบกับเวอร์ชันที่เคยรายงานไว้) — ยอดแยกตามเวอร์ชันจะได้ตรงความจริง
+    // ไม่ค้างอยู่ที่เวอร์ชันแรกที่ติดตั้ง
+    //
+    // ตั้งใจไม่รายงานเป็นระยะ ส่งเท่าที่จำเป็นจริงๆ คือตอนติดตั้งครั้งแรกกับตอนอัปเดต
     if (record.consent && version && record.version !== version) {
       try {
         const info = await getHospitalInfo();
@@ -52,10 +64,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           await sendToRegistry({
             hospitalCode: info.code,
             hospitalName: info.name,
+            machineName: getMachineName(),
+            ...getInstallDates(),
             version,
             sentAt: new Date().toISOString(),
           });
-          saveConsent(true, version);
+          saveConsent(true, version, new Date().toISOString());
         }
       } catch {
         // ส่งไม่ได้ก็ไม่บันทึกเวอร์ชัน จะได้ลองใหม่คราวหน้าที่เปิดโปรแกรม
@@ -88,10 +102,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     void sendToRegistry({
       hospitalCode: info.code,
       hospitalName: info.name,
+      machineName: getMachineName(),
+      ...getInstallDates(),
       version,
       sentAt: new Date().toISOString(),
     })
-      .then(() => saveConsent(true, version))
+      .then(() => saveConsent(true, version, new Date().toISOString()))
       .catch(() => {
         // ส่งไม่สำเร็จก็ปล่อยไว้ ไม่ต้องแจ้งผู้ใช้ เพราะจะลองใหม่ให้เองรอบหน้า
       });

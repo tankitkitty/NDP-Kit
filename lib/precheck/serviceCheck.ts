@@ -30,6 +30,16 @@ export interface ServiceCheckConfig {
   /** ICD-10 ที่นับว่าเป็นบริการนี้ เขียนแบบไม่มีจุด เช่น ["Z390","Z391"] */
   icdCodes: string[];
   /**
+   * ICD-9-CM (รหัสหัตถการ) ที่ต้องมีคู่กัน — ไม่ใส่ = บริการนี้ไม่ต้องมีหัตถการ
+   *
+   * ถือว่ามีเมื่อเจอที่ใดที่หนึ่งใน
+   *   1) ตาราง opdoprt (หน้าบันทึกหัตถการของ HOSxP)
+   *   2) รายการค่าบริการที่คีย์ในวันนั้น ซึ่งตัวรายการผูก icd9cm ไว้ (nondrugitems.icd9cm)
+   * เพราะหลายหน่วยไม่ได้คีย์หน้าหัตถการเลย แต่ผูกรหัสไว้กับรายการค่าบริการแทน
+   * ถ้าดูแค่ตารางเดียวจะขึ้นว่าขาดทั้งที่คีย์ครบ
+   */
+  icd9Codes?: string[];
+  /**
    * รหัส ADP ของ สปสช. ที่ต้องผูกกับรายการค่าบริการ
    *
    * ใส่ได้หลายรหัสเพราะบางบริการ สปสช. ให้ใช้รหัสใดรหัสหนึ่งก็ได้ — เจอรหัสไหน
@@ -44,6 +54,16 @@ export interface ServiceCheckConfig {
    * เจอรหัสไหนรหัสหนึ่งจากทั้งสองชุดก็ถือว่ามีแล้ว
    */
   billCodes?: string[];
+  /**
+   * รหัส TMLT (มาตรฐานรายการตรวจแล็บ) ที่ยืนยันว่าให้บริการแล้ว
+   *
+   * นับรวมเป็นเงื่อนไขเดียวกับ adpCodes/billCodes คือ "เคสนี้มีหลักฐานว่าให้บริการแล้ว
+   * หรือยัง" เจอทางใดทางหนึ่งก็พอ เพราะ สปสช. ยอมรับได้ทั้งการคีย์ค่าบริการและการสั่งแล็บ
+   *
+   * รหัสนี้อยู่ที่ lab_items.tmlt_code ซึ่งเป็นทะเบียนรายการแล็บ คนละที่กับรายการ
+   * ค่าบริการ จึงต้องไล่ผ่าน lab_head -> lab_order -> lab_items
+   */
+  labTmltCodes?: string[];
   /**
    * ข้อความแทนรายการรหัสในหน้าจอ ใส่เมื่อรหัสไม่ได้มาจากชุดเดียวกันทั้งหมด
    * เช่น "ADP 30014 / 30017 หรือ CSMBS 31101" — ไม่ใส่จะประกอบจากรหัสที่ให้มาเอง
@@ -77,8 +97,13 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
   const adpCodes = cfg.adpCodes || [];
   const billCodes = cfg.billCodes || [];
   const drugCodes = cfg.drugCodes || [];
+  const labCodes = cfg.labTmltCodes || [];
+  const needLab = labCodes.length > 0;
+  const icd9List = expandIcd(cfg.icd9Codes || []);
+  const needIcd9 = icd9List.length > 0;
+  const icd9Label = (cfg.icd9Codes || []).join(" / ");
   // บริการบางอย่างดูจากรายการยาอย่างเดียว ไม่มีรหัสค่าบริการให้ตรวจ
-  const needAdp = adpCodes.length + billCodes.length > 0;
+  const needAdp = adpCodes.length + billCodes.length + labCodes.length > 0;
   const needDrug = drugCodes.length > 0;
 
   const drugLabel = cfg.drugLabel || (cfg.drugName ? `ยา ${cfg.drugName}` : "รายการยา");
@@ -91,6 +116,7 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
     [
       adpCodes.length ? `ADP ${adpCodes.join(" หรือ ")}` : "",
       billCodes.length ? `bill code ${billCodes.join(" หรือ ")}` : "",
+      labCodes.length ? `TMLT ${labCodes.join(" หรือ ")}` : "",
     ]
       .filter(Boolean)
       .join(" หรือ ");
@@ -100,6 +126,7 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
     title: cfg.title,
     description:
       `เคส${cfg.serviceName} ต้องมี ICD-10 ${icdLabel}` +
+      (needIcd9 ? ` และ ICD-9-CM ${icd9Label}` : "") +
       (needAdp ? ` และค่าบริการรหัส ${adpLabel}` : "") +
       (needDrug ? ` และรายการยารหัส ${drugCodeShort}` : "") +
       " (เลือกช่วงวันที่ด้านบน)",
@@ -120,6 +147,50 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
         const icdFoundSql = `(SELECT GROUP_CONCAT(DISTINCT d.icd10 ORDER BY d.icd10 SEPARATOR ', ')
                                 FROM ovstdiag d
                                WHERE d.vn = c.vn AND d.icd10 IN (${ph(icdList.length)}))`;
+
+        // รายการค่าบริการที่ผูกรหัสหัตถการ (icd9cm) ไว้ — ใช้เป็นอีกทางที่ถือว่า
+        // เคสนั้นมีหัตถการแล้ว สำหรับหน่วยที่ไม่ได้คีย์หน้าหัตถการของ HOSxP
+        const icd9Items = needIcd9 ? await findByIcd9(icd9List) : [];
+        const icd9Icodes = icd9Items.map((i) => i.icode);
+        const hasOpdoprt = needIcd9 ? (await tableColumns("opdoprt")).size > 0 : false;
+
+        // ต้องเป็น subquery เดี่ยวๆ แล้วเอามาต่อกันด้วย CONCAT_WS ห้ามยัด UNION ไว้ใน
+        // derived table เพราะ MariaDB ไม่ยอมให้ตารางที่ derive ข้างในอ้างคอลัมน์ของ
+        // query ข้างนอก (c.vn) จะฟ้อง Unknown column ทันที ส่วน CONCAT_WS ข้าม NULL
+        // ให้เอง ฝั่งไหนไม่เจอก็ยังได้ค่าจากอีกฝั่ง
+        let icd9FoundSql = "''";
+        if (needIcd9) {
+          const parts: string[] = [];
+          if (hasOpdoprt) {
+            params.push(...icd9List);
+            parts.push(`(SELECT GROUP_CONCAT(DISTINCT REPLACE(op.icd9, '.', '') SEPARATOR ', ')
+                           FROM opdoprt op
+                          WHERE op.vn = c.vn AND op.icd9 IN (${ph(icd9List.length)}))`);
+          }
+          if (icd9Icodes.length > 0) {
+            params.push(...icd9Icodes);
+            parts.push(`(SELECT GROUP_CONCAT(DISTINCT REPLACE(COALESCE(nd.icd9cm, ''), '.', '') SEPARATOR ', ')
+                           FROM opitemrece i
+                           JOIN nondrugitems nd ON nd.icode = i.icode
+                          WHERE i.vn = c.vn AND i.icode IN (${ph(icd9Icodes.length)}))`);
+          }
+          if (parts.length > 0) {
+            icd9FoundSql = `CONCAT_WS(', ', ${parts.join(", ")})`;
+          }
+        }
+
+        // รายการแล็บที่ตั้งรหัส TMLT ตรงกับที่กำหนด
+        const labItems = needLab ? await findLabItems(labCodes) : [];
+        const labItemCodes = labItems.map((i) => i.icode);
+
+        let labCountSql = "0";
+        if (labItemCodes.length > 0) {
+          params.push(...labItemCodes);
+          labCountSql = `(SELECT COUNT(*)
+                            FROM lab_head lh
+                            JOIN lab_order lo ON lo.lab_order_number = lh.lab_order_number
+                           WHERE lh.vn = c.vn AND lo.lab_items_code IN (${ph(labItemCodes.length)}))`;
+        }
 
         let adpCountSql = "0";
         if (adpIcodes.length > 0) {
@@ -150,6 +221,34 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
                               FROM opitemrece i
                              WHERE i.vstdate BETWEEN ? AND ? AND i.icode IN (${ph(allIcodes.length)})`;
         }
+        // เคสที่สั่งแล็บไว้แต่ยังไม่ได้ลง dx ก็ต้องเห็นด้วย
+        if (needLab && labItemCodes.length > 0) {
+          params.push(ctx.from, ctx.to, ...labItemCodes);
+          candidateSql += `
+                             UNION
+                            SELECT DISTINCT lh.vn
+                              FROM lab_head lh
+                              JOIN lab_order lo ON lo.lab_order_number = lh.lab_order_number
+                             WHERE lh.order_date BETWEEN ? AND ?
+                               AND lo.lab_items_code IN (${ph(labItemCodes.length)})`;
+        }
+        // เคสที่บันทึกหัตถการไว้แต่ยังไม่ได้ลง dx ก็ต้องเห็นด้วย ไม่งั้นจะตกหล่น
+        if (needIcd9 && hasOpdoprt) {
+          params.push(ctx.from, ctx.to, ...icd9List);
+          candidateSql += `
+                             UNION
+                            SELECT DISTINCT op.vn
+                              FROM opdoprt op
+                             WHERE op.opdate BETWEEN ? AND ? AND op.icd9 IN (${ph(icd9List.length)})`;
+        }
+        if (needIcd9 && icd9Icodes.length > 0) {
+          params.push(ctx.from, ctx.to, ...icd9Icodes);
+          candidateSql += `
+                             UNION
+                            SELECT DISTINCT i.vn
+                              FROM opitemrece i
+                             WHERE i.vstdate BETWEEN ? AND ? AND i.icode IN (${ph(icd9Icodes.length)})`;
+        }
 
         const raw: any = await selectOnly(
           `SELECT c.vn,
@@ -157,7 +256,9 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
                   DATE_FORMAT(o.vstdate, '%Y-%m-%d') AS vstdate,
                   TRIM(CONCAT(COALESCE(p.pname, ''), COALESCE(p.fname, ''), ' ', COALESCE(p.lname, ''))) AS patient_name,
                   ${icdFoundSql} AS icd_found,
+                  ${icd9FoundSql} AS icd9_found,
                   ${adpCountSql} AS adp_count,
+                  ${labCountSql} AS lab_count,
                   ${drugCountSql} AS drug_count
            FROM (${candidateSql}) c
            JOIN ovst o ON o.vn = c.vn
@@ -170,13 +271,19 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
         const rows = raw.map((r: any) => {
           const icd = String(r.icd_found || "").trim();
           const adpCount = Number(r.adp_count || 0);
+          const labCount = Number(r.lab_count || 0);
           const drugCount = Number(r.drug_count || 0);
           const hasIcd = icd !== "";
-          const hasAdp = adpCount > 0;
+          // เจอทางใดทางหนึ่งก็ถือว่ามีหลักฐานว่าให้บริการแล้ว (ค่าบริการ หรือ ผลแล็บ)
+          const hasAdp = adpCount > 0 || labCount > 0;
           const hasDrug = drugCount > 0;
+
+          const icd9 = String(r.icd9_found || "").trim();
+          const hasIcd9 = icd9 !== "";
 
           const missing: string[] = [];
           if (!hasIcd) missing.push(`ICD-10 ${icdLabel}`);
+          if (needIcd9 && !hasIcd9) missing.push(`ICD-9-CM ${icd9Label}`);
           if (needAdp && !hasAdp) missing.push(`ค่าบริการ ${adpLabel}`);
           if (needDrug && !hasDrug) missing.push(drugLabel);
 
@@ -186,7 +293,9 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
             hn: r.hn,
             patient_name: r.patient_name,
             icd_found: hasIcd ? icd : "",
-            adp_found: hasAdp ? `${adpCount} รายการ` : "",
+            icd9_found: hasIcd9 ? icd9 : "",
+            adp_found: adpCount > 0 ? `${adpCount} รายการ` : "",
+            lab_found: labCount > 0 ? `${labCount} รายการ` : "",
             drug_found: hasDrug ? `${drugCount} รายการ` : "",
             verdict: missing.length === 0 ? OK_MARK : `ขาด ${missing.join(" + ")}`,
             [ROW_ALERT_KEY]: missing.length > 0,
@@ -202,7 +311,10 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
         const total = rows.length;
         const bad = rows.filter((r: any) => r[ROW_ALERT_KEY]).length;
         const noIcd = rows.filter((r: any) => !r.icd_found).length;
-        const noAdp = needAdp ? rows.filter((r: any) => !r.adp_found).length : 0;
+        const noIcd9 = needIcd9 ? rows.filter((r: any) => !r.icd9_found).length : 0;
+        const noAdp = needAdp
+          ? rows.filter((r: any) => !r.adp_found && !r.lab_found).length
+          : 0;
         const noDrug = needDrug ? rows.filter((r: any) => !r.drug_found).length : 0;
 
         // ไม่มีรายการไหนผูกรหัสไว้เลย = ตั้งค่าไม่ครบตั้งแต่ต้น ต้องบอกก่อนอย่างอื่น
@@ -222,7 +334,9 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
               { key: "hn", label: "HN" },
               { key: "patient_name", label: "ชื่อ-สกุล" },
               { key: "icd_found", label: `ICD-10 (${icdLabel})` },
-              ...(needAdp ? [{ key: "adp_found", label: `ค่าบริการ ${adpLabel}` }] : []),
+              ...(needIcd9 ? [{ key: "icd9_found", label: `ICD-9-CM (${icd9Label})` }] : []),
+              ...(needAdp ? [{ key: "adp_found", label: "ค่าบริการที่คีย์" }] : []),
+              ...(needLab ? [{ key: "lab_found", label: `แล็บ TMLT ${labCodes.join("/")}` }] : []),
               ...(needDrug ? [{ key: "drug_found", label: drugLabel }] : []),
               { key: "verdict", label: "ผลตรวจ" },
             ],
@@ -252,6 +366,23 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
           });
         }
 
+        if (needLab) {
+          sections.push({
+            title: `รายการแล็บที่ตั้งรหัส TMLT ${labCodes.join(" หรือ ")} ในฐานนี้`,
+            columns: [
+              { key: "icode", label: "lab_items_code" },
+              { key: "name", label: "ชื่อรายการแล็บ" },
+              { key: "code", label: "TMLT ที่ตั้งไว้" },
+            ],
+            rows: labItems.map((i) => ({ icode: i.icode, name: i.name, code: i.code })),
+            note:
+              labItems.length === 0
+                ? `ยังไม่มีรายการแล็บใดตั้งรหัส TMLT ${labCodes.join(" หรือ ")} ไว้เลย — ` +
+                  `ถ้าหน่วยบริการใช้ทางแล็บเป็นหลัก ต้องไปตั้งรหัสที่ทะเบียนรายการแล็บก่อน`
+                : undefined,
+          });
+        }
+
         if (needDrug) {
           sections.push({
             title: `รายการยาที่ตั้งรหัสตรงกับที่ สปสช. กำหนด (${drugCodeShort}) ในฐานนี้`,
@@ -269,9 +400,12 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
           });
         }
 
-        const setupMissing = adpMissing || drugMissing;
+        // ถ้าตั้งไว้ทั้งสองทาง (ค่าบริการ/แล็บ) ขอแค่ทางใดทางหนึ่งพร้อมก็ยังตรวจได้
+        const serviceSetupMissing = needLab ? adpMissing && labItems.length === 0 : adpMissing;
+        const setupMissing = serviceSetupMissing || drugMissing;
         const breakdown = [
           noIcd > 0 ? `ขาด ICD-10 ${noIcd} เคส` : "",
+          noIcd9 > 0 ? `ขาด ICD-9-CM ${noIcd9} เคส` : "",
           noAdp > 0 ? `ขาดค่าบริการ ${noAdp} เคส` : "",
           noDrug > 0 ? `ขาด${drugLabel} ${noDrug} เคส` : "",
         ].filter(Boolean);
@@ -302,6 +436,11 @@ export function createServiceCheck(cfg: ServiceCheckConfig): CheckDefinition {
             `• เคสที่ขาดค่าบริการหรือยา: เปิด visit นั้นใน HOSxP แล้วคีย์รายการเพิ่ม ` +
             `(ห้าม INSERT ลง opitemrece เองจาก SQL เพราะยอดค่ารักษา/ใบแจ้งหนี้จะไม่ตรงกัน)\n` +
             `• เคสที่ขาด ICD-10: ลงวินิจฉัย ${icdLabel} เพิ่มที่หน้าห้องตรวจของ visit นั้น\n` +
+            (needIcd9
+              ? `• เคสที่ขาด ICD-9-CM: บันทึกหัตถการ ${icd9Label} ที่หน้าหัตถการของ visit นั้น ` +
+                `หรือผูกรหัสหัตถการไว้กับรายการค่าบริการ (ช่อง icd9cm ของรายการค่ารักษา) ` +
+                `เพื่อให้ระบบมองเห็นจากรายการที่คีย์ไปแล้วได้เลย\n`
+              : "") +
             `• ถ้าตารางด้านล่างไม่มีรายการใดผูกรหัสไว้เลย ให้ไปตั้งรหัสที่ HOSxP เมนูตั้งค่า > ค่ารักษาพยาบาล ` +
             `(รายการค่าบริการ) หรือหน้าจอรายการยา แล้วใส่รหัสให้ตรง — ตั้งครั้งเดียวใช้ได้ตลอด\n` +
             (needDrug ? `\nรหัสยาที่ สปสช. ยอมรับสำหรับบริการนี้: ${drugCodeLabel}\n` : "") +
@@ -353,26 +492,34 @@ async function findServiceItems(adpCodes: string[], billCodes: string[]): Promis
   const out: ItemRow[] = [];
   for (const table of ["nondrugitems", "drugitems"]) {
     const cols = await tableColumns(table);
-    const adpCol = adpCodes.length ? pickCol(cols, ["nhso_adp_code"]) : null;
-    const billCol = billCodes.length ? pickCol(cols, ["billcode"]) : null;
-    if (!adpCol && !billCol) continue;
+    const adpCol = pickCol(cols, ["nhso_adp_code"]);
+    const billCol = pickCol(cols, ["billcode"]);
+
+    // รหัส CSMBS (ที่ส่งมาทาง billCodes) อยู่ได้ทั้งช่อง billcode และ nhso_adp_code
+    // แล้วแต่ว่าหน่วยบริการกรอกไว้ตรงไหน จึงต้องค้นทั้งสองช่อง ถ้าค้นช่องเดียวจะ
+    // ไม่เจอรายการของหน่วยที่กรอกไว้อีกช่อง แล้วขึ้นว่าขาดค่าบริการทั้งที่คีย์ครบ
+    const adpSearch = [...adpCodes, ...billCodes];
+    const billSearch = billCodes;
+    const useAdpCol = adpCol && adpSearch.length > 0;
+    const useBillCol = billCol && billSearch.length > 0;
+    if (!useAdpCol && !useBillCol) continue;
 
     // เทียบแบบตัดช่องว่างทิ้งทั้งสองฝั่ง เพราะบางหน่วยพิมพ์รหัสติดช่องว่างมาด้วย
     const conds: string[] = [];
     const params: unknown[] = [];
-    if (adpCol) {
-      conds.push(`REPLACE(COALESCE(${adpCol}, ''), ' ', '') IN (${ph(adpCodes.length)})`);
-      params.push(...adpCodes);
+    if (useAdpCol) {
+      conds.push(`REPLACE(COALESCE(${adpCol}, ''), ' ', '') IN (${ph(adpSearch.length)})`);
+      params.push(...adpSearch);
     }
-    if (billCol) {
-      conds.push(`REPLACE(COALESCE(${billCol}, ''), ' ', '') IN (${ph(billCodes.length)})`);
-      params.push(...billCodes);
+    if (useBillCol) {
+      conds.push(`REPLACE(COALESCE(${billCol}, ''), ' ', '') IN (${ph(billSearch.length)})`);
+      params.push(...billSearch);
     }
 
     const rows: any = await selectOnly(
       `SELECT icode, name
-              ${adpCol ? `, REPLACE(COALESCE(${adpCol}, ''), ' ', '') AS adp_code` : ""}
-              ${billCol ? `, REPLACE(COALESCE(${billCol}, ''), ' ', '') AS bill_code` : ""}
+              ${useAdpCol ? `, REPLACE(COALESCE(${adpCol}, ''), ' ', '') AS adp_code` : ""}
+              ${useBillCol ? `, REPLACE(COALESCE(${billCol}, ''), ' ', '') AS bill_code` : ""}
          FROM ${table}
         WHERE ${conds.join(" OR ")}
         LIMIT 50`,
@@ -381,7 +528,7 @@ async function findServiceItems(adpCodes: string[], billCodes: string[]): Promis
 
     for (const r of rows) {
       // บอกด้วยว่าเจอด้วยรหัสฝั่งไหน เพราะรายการเดียวกันอาจตั้งไว้คนละช่อง
-      const byAdp = adpCol && adpCodes.includes(String(r.adp_code));
+      const byAdp = useAdpCol && adpSearch.includes(String(r.adp_code));
       out.push({
         icode: String(r.icode),
         name: String(r.name || ""),
@@ -391,6 +538,69 @@ async function findServiceItems(adpCodes: string[], billCodes: string[]): Promis
     }
   }
   return out;
+}
+
+/**
+ * รายการแล็บที่ตั้งรหัส TMLT ตรงกับที่กำหนด
+ *
+ * TMLT อยู่ในทะเบียนรายการแล็บ (lab_items) ไม่ใช่รายการค่าบริการ การจะรู้ว่าเคสหนึ่ง
+ * ตรวจแล็บตัวนั้นหรือยัง จึงต้องไล่ผ่าน lab_head -> lab_order -> lab_items
+ *
+ * คืน icode เป็น lab_items_code เพื่อให้ผู้เรียกใช้ต่อได้เหมือนรายการอื่น
+ */
+async function findLabItems(tmltCodes: string[]): Promise<ItemRow[]> {
+  const cols = await tableColumns("lab_items");
+  const codeCol = pickCol(cols, ["tmlt_code", "tlmt_code"]);
+  const nameCol = pickCol(cols, ["lab_items_name", "name"]);
+  if (!codeCol || cols.size === 0) return [];
+  // ไม่มีตารางใบสั่งแล็บก็ตรวจต่อไม่ได้ ถือว่าไม่มีรายการ
+  if ((await tableColumns("lab_head")).size === 0 || (await tableColumns("lab_order")).size === 0) {
+    return [];
+  }
+
+  const rows: any = await selectOnly(
+    `SELECT lab_items_code, ${nameCol ? nameCol : "''"} AS name,
+            REPLACE(COALESCE(${codeCol}, ''), ' ', '') AS tmlt
+       FROM lab_items
+      WHERE REPLACE(COALESCE(${codeCol}, ''), ' ', '') IN (${ph(tmltCodes.length)})
+      LIMIT 50`,
+    tmltCodes
+  );
+
+  return rows.map((r: any) => ({
+    icode: String(r.lab_items_code),
+    name: String(r.name || ""),
+    code: String(r.tmlt || ""),
+    source: "lab_items.tmlt_code",
+  }));
+}
+
+/**
+ * รายการค่าบริการที่ผูกรหัสหัตถการ (icd9cm) ตรงกับที่กำหนด
+ *
+ * ใช้เป็นอีกทางที่ถือว่าเคสนั้นมีหัตถการแล้ว สำหรับหน่วยบริการที่ไม่ได้คีย์หน้า
+ * หัตถการของ HOSxP แต่ผูกรหัสไว้กับรายการค่าบริการแทน (พบว่าเป็นวิธีที่ใช้จริง
+ * มากกว่าในฐานที่ตรวจ ซึ่งตาราง opdoprt ว่างเปล่าทั้งตาราง)
+ */
+async function findByIcd9(icd9List: string[]): Promise<ItemRow[]> {
+  const cols = await tableColumns("nondrugitems");
+  const col = pickCol(cols, ["icd9cm", "icd9"]);
+  if (!col) return [];
+
+  const rows: any = await selectOnly(
+    `SELECT icode, name, REPLACE(COALESCE(${col}, ''), '.', '') AS icd9
+       FROM nondrugitems
+      WHERE REPLACE(COALESCE(${col}, ''), '.', '') IN (${ph(icd9List.length)})
+      LIMIT 50`,
+    icd9List
+  );
+
+  return rows.map((r: any) => ({
+    icode: String(r.icode),
+    name: String(r.name || ""),
+    code: String(r.icd9 || ""),
+    source: "nondrugitems.icd9cm",
+  }));
 }
 
 /**

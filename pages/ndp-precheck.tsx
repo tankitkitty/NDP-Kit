@@ -51,6 +51,9 @@ const QUERY_CARDS: CardMeta[] = [
   { id: "triferdine", title: "บริการจ่ายยา Triferdine (ICD-10 Z392 + ADP 30016)", description: "เคสจ่ายยา Triferdine ต้องมีครบทั้ง ICD-10 Z392, ค่าบริการรหัส ADP 30016 และรายการยารหัส 737390 หรือ 689609", needsRange: true },
   { id: "pregnancy-test", title: "บริการชุดทดสอบการตั้งครรภ์ (ICD-10 Z32 + ADP 30014/30017/31101)", description: "เคสชุดทดสอบการตั้งครรภ์ต้องมีทั้ง ICD-10 Z320 หรือ Z321 และค่าบริการรหัส ADP 30014 / 30017 หรือ CSMBS 31101", needsRange: true },
   { id: "contraceptive", title: "บริการยาเม็ดและยาฉีดคุมกำเนิด (ICD-10 Z304 + รหัส TMT)", description: "เคสคุมกำเนิดต้องมีทั้ง ICD-10 Z304 และรายการยาที่ตั้งรหัส TMT ตรงตามที่ สปสช. กำหนด (23 รหัส)", needsRange: true },
+  { id: "hpv-screening", title: "คัดกรองมะเร็งปากมดลูก HPV ค่าเก็บตัวอย่าง (Z115 + 9146 + 38608)", description: "เคสคัดกรองมะเร็งปากมดลูกต้องมีครบทั้ง ICD-10 Z115, ICD-9-CM 9146 และค่าบริการรหัส CSMBS 38608", needsRange: true },
+  { id: "diabetes-screening", title: "คัดกรองเบาหวานกลุ่มเสี่ยง (Z018 + TLMT/CSMBS/NHSO)", description: "เคสคัดกรองเบาหวานต้องมี ICD-10 Z018 และมีอย่างใดอย่างหนึ่งใน TMLT 320281 (แล็บ), CSMBS 32203 หรือ NHSO 12003", needsRange: true },
+  { id: "cholesterol-screening", title: "คัดกรอง Total Cholesterol + HDL อายุ 35 ปีขึ้นไป (Z108)", description: "เคสคัดกรองไขมันต้องมี ICD-10 Z108 และมีอย่างใดอย่างหนึ่งใน GPU 31001, TMLT 320259 (แล็บ), CSMBS 32004 หรือ NHSO 12004", needsRange: true },
   { id: "condom", title: "บริการถุงยางพร้อมให้คำปรึกษา (ICD-10 Z30 + bill code)", description: "เคสถุงยางพร้อมให้คำปรึกษาต้องมีทั้ง ICD-10 Z30/Z300/Z304/Z309 และรายการค่าบริการ bill code 6201001/6201005/6201006/6201007", needsRange: true },
 ];
 
@@ -67,7 +70,7 @@ const TABS: { key: string; label: string; hint: string; ids: string[] }[] = [
     key: "service",
     label: "ตรวจข้อมูลการบริการ",
     hint: "ตรวจข้อมูลที่คีย์จริงในช่วงวันที่ที่เลือก ก่อนส่งเคลมแต่ละรอบ",
-    ids: ["auth-code", "postnatal-care", "triferdine", "pregnancy-test", "contraceptive", "condom", "claim-log"],
+    ids: ["auth-code", "postnatal-care", "triferdine", "pregnancy-test", "contraceptive", "condom", "hpv-screening", "diabetes-screening", "cholesterol-screening", "claim-log"],
   },
   {
     key: "master",

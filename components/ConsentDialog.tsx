@@ -1,9 +1,29 @@
 import { useEffect, useState } from "react";
 
-type Preview = { hospitalCode: string; hospitalName: string; version: string };
+type Preview = {
+  hospitalCode: string;
+  hospitalName: string;
+  machineName: string;
+  installedAt: string;
+  updatedAt: string;
+  version: string;
+};
+
+/** วันที่แบบอ่านง่ายสำหรับแสดงในฟอร์ม (ค่าที่ส่งจริงเป็น ISO เต็ม) */
+function thaiDate(iso: string): string {
+  if (!iso) return "(ไม่ทราบ)";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "(ไม่ทราบ)";
+  return d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" });
+}
 
 /**
- * แบบฟอร์มขอความยินยอมส่งข้อมูลการใช้งาน แสดงครั้งเดียวตอนตั้งค่าครั้งแรก
+ * หน้าต่างแจ้งให้ทราบเรื่องการส่งข้อมูลการใช้งาน แสดงครั้งเดียวตอนตั้งค่าครั้งแรก
+ *
+ * เป็นการ "แจ้งให้ทราบ" ไม่ใช่ "ขอความยินยอม" จึงมีปุ่มเดียวคือรับทราบ — ทำได้เพราะ
+ * ข้อมูลที่ส่งไม่มีข้อมูลผู้ป่วยหรือข้อมูลส่วนบุคคลเลย มีแต่รหัสหน่วยบริการ ชื่อเครื่อง
+ * และเวอร์ชันโปรแกรม ถ้อยคำในหน้าต่างนี้ต้องไม่เขียนว่า "ขอความยินยอม" เพราะจะกลาย
+ * เป็นถามแล้วไม่ให้ทางปฏิเสธ ซึ่งทำให้ผู้ใช้เข้าใจผิด
  *
  * ทำไมต้องรอจนล็อกอินได้ก่อน: รหัสสถานบริการอ่านจากตาราง opdconfig ในฐานข้อมูล
  * HOSxP ตราบใดที่ยังตั้งค่าฐานข้อมูลไม่สำเร็จก็ยังไม่มีรหัสให้แสดงหรือส่ง และการ
@@ -64,11 +84,11 @@ export default function ConsentDialog() {
     <div className="modal-backdrop">
       <div className="modal-card" style={{ textAlign: "left", maxWidth: 520 }}>
         <h2 className="section-title" style={{ marginTop: 0 }}>
-          ขอความยินยอมส่งข้อมูลการใช้งาน
+          แจ้งการส่งข้อมูลการใช้งาน
         </h2>
         <p style={{ marginTop: 0 }}>
           เพื่อให้ผู้พัฒนาทราบยอดการใช้งานโปรแกรม และแจ้งเตือนได้เมื่อมีเวอร์ชันใหม่
-          ขอความยินยอมส่งข้อมูล <strong>เพียง 4 รายการนี้เท่านั้น</strong>
+          โปรแกรมจะส่งข้อมูล <strong>เพียง 6 รายการนี้เท่านั้น</strong>
         </p>
         <div className="grid-form" style={{ marginBottom: 16 }}>
           <div className="toolbar" style={{ justifyContent: "space-between" }}>
@@ -78,6 +98,18 @@ export default function ConsentDialog() {
           <div className="toolbar" style={{ justifyContent: "space-between" }}>
             <span>ชื่อสถานพยาบาล</span>
             <strong>{preview.hospitalName || "(ไม่พบในฐานข้อมูล)"}</strong>
+          </div>
+          <div className="toolbar" style={{ justifyContent: "space-between" }}>
+            <span>ชื่อเครื่องที่ติดตั้ง</span>
+            <strong>{preview.machineName || "(ไม่ทราบ)"}</strong>
+          </div>
+          <div className="toolbar" style={{ justifyContent: "space-between" }}>
+            <span>วันที่ติดตั้ง</span>
+            <strong>{thaiDate(preview.installedAt)}</strong>
+          </div>
+          <div className="toolbar" style={{ justifyContent: "space-between" }}>
+            <span>วันที่อัปเดตล่าสุด</span>
+            <strong>{thaiDate(preview.updatedAt)}</strong>
           </div>
           <div className="toolbar" style={{ justifyContent: "space-between" }}>
             <span>เวอร์ชันโปรแกรม</span>
@@ -90,17 +122,16 @@ export default function ConsentDialog() {
         </div>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
           <strong>ไม่มีข้อมูลผู้ป่วยหรือข้อมูลส่วนบุคคลใดๆ</strong> รวมอยู่ด้วย
-          จะยินยอมหรือไม่ก็ใช้งานโปรแกรมได้ครบทุกอย่างเหมือนกัน และระบบจะถามเพียงครั้งเดียว
+          (ชื่อเครื่องคือชื่อในเครือข่ายของหน่วยงาน ไม่ใช่ชื่อผู้ใช้งาน)
+          ส่งเฉพาะตอนติดตั้งครั้งแรกและตอนอัปเดตเป็นเวอร์ชันใหม่สำเร็จเท่านั้น
+          ไม่ได้ส่งเป็นระยะ และหน้าต่างนี้จะแสดงเพียงครั้งเดียว
         </p>
         {error ? (
           <p style={{ color: "var(--danger, #b42318)", marginTop: 0 }}>{error}</p>
         ) : null}
         <div className="toolbar">
           <button className="button-primary" onClick={() => answer(true)} disabled={busy}>
-            {busy ? "กำลังบันทึก..." : "ยินยอม"}
-          </button>
-          <button className="button-ghost" onClick={() => answer(false)} disabled={busy}>
-            ไม่ยินยอม
+            {busy ? "กำลังบันทึก..." : "รับทราบ"}
           </button>
         </div>
       </div>

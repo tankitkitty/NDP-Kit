@@ -1,6 +1,6 @@
 @echo off
 rem ==========================================================================
-rem  NDP Kit - installer launcher
+rem  NDP-Kit - installer launcher
 rem
 rem  IMPORTANT: keep this file 100%% ASCII. cmd.exe reads a .bat byte-by-byte
 rem  using the console code page, so Thai text placed here makes its parser
