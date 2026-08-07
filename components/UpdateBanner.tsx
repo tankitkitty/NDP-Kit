@@ -1,11 +1,30 @@
 import { useEffect, useRef, useState } from "react";
+import { compareVersion, formatVersion } from "../lib/version";
+
+type DriveVersion = {
+  tag: string;
+  fileName: string;
+  sizeBytes: number;
+};
 
 type UpdateInfo = {
   supported: boolean;
   current: string;
   latest?: string;
   hasUpdate?: boolean;
+  versions?: DriveVersion[];
 };
+
+function formatSize(bytes: number): string {
+  if (!bytes) return "";
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+/** เลขเวอร์ชันพร้อมวันเวลาที่อ่านออก ใช้ในที่ที่มีพื้นที่พอ */
+function withDate(tag: string): string {
+  const pretty = formatVersion(tag);
+  return pretty === tag.replace(/^v/i, "") ? tag : `${tag}  (${pretty})`;
+}
 
 /**
  * ขั้นตอนที่หน้าเว็บ "มองเห็นได้จริง" ระหว่างอัปเดต
@@ -28,6 +47,8 @@ export default function UpdateBanner() {
   const [stagedOnly, setStagedOnly] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [startError, setStartError] = useState("");
+  /** เวอร์ชันที่ผู้ใช้เลือกจะติดตั้ง ค่าเริ่มต้นคือตัวใหม่ที่สุด */
+  const [selected, setSelected] = useState("");
   const startedAt = useRef(0);
 
   // ตัวแสดงสถานะเวอร์ชันและปุ่มตรวจเองย้ายไปอยู่แถบเมนูด้านซ้ายแล้ว (VersionCheck)
@@ -39,7 +60,14 @@ export default function UpdateBanner() {
         const res = await fetch("/api/update", { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled && data.supported && data.hasUpdate) setInfo(data);
+        if (cancelled || !data.supported) return;
+        // แสดงการ์ดเมื่อมีเวอร์ชันใหม่ หรือเมื่อมีเวอร์ชันให้เลือกติดตั้งอยู่
+        // กรณีหลังจำเป็นเพราะเวลาที่ต้องถอยกลับไปเวอร์ชันก่อนหน้า คือตอนที่เครื่อง
+        // ติดตั้งตัวล่าสุดอยู่แล้วพอดี ถ้าซ่อนไว้จะไม่มีทางเข้าถึงได้เลย
+        if (data.hasUpdate || (data.versions && data.versions.length > 0)) {
+          setInfo(data);
+          setSelected(data.latest || "");
+        }
       } catch {
         // ตรวจไม่ได้ก็ไม่ต้องแสดงอะไร แถบซ้ายเป็นคนรายงานความผิดพลาดให้แล้ว
       }
@@ -57,10 +85,20 @@ export default function UpdateBanner() {
   }, [stepIndex]);
 
   async function runUpdate() {
-    const target = info?.latest;
+    const target = selected || info?.latest;
+    if (!target) return;
+
+    // เตือนให้ชัดเมื่อกำลังจะติดตั้งเวอร์ชันที่เก่ากว่าตัวที่ใช้อยู่ เพราะเป็นการ
+    // ย้อนกลับ ไม่ใช่การอัปเดต ผู้ใช้ควรรู้ตัวก่อนว่ากำลังทำอะไร
+    const goingBack = !!info?.current && compareVersion(target, info.current) < 0;
+    const headline = goingBack
+      ? `ย้อนกลับไปเวอร์ชัน ${withDate(target)} ตอนนี้เลยไหม\n\n` +
+        `เวอร์ชันที่ใช้อยู่คือ ${withDate(info!.current)} ซึ่งใหม่กว่า`
+      : `ติดตั้งเวอร์ชัน ${withDate(target)} ตอนนี้เลยไหม`;
+
     if (
       !window.confirm(
-        `อัปเดตเป็น ${target} ตอนนี้เลยไหม\n\n` +
+        `${headline}\n\n` +
           `โปรแกรมจะปิดและเปิดใหม่เอง ผู้ใช้คนอื่นจะใช้งานไม่ได้ราวหนึ่งนาที\n` +
           `ค่าตั้งค่าทั้งหมดจะไม่หาย`
       )
@@ -79,7 +117,11 @@ export default function UpdateBanner() {
     // สคริปต์ไม่ได้ หรือเปิด PowerShell ไม่ได้) แล้วเราไม่ดูผลลัพธ์ หน้าเว็บจะค้าง
     // อยู่ที่ "ขั้นที่ 1" ตลอดไปโดยไม่บอกสาเหตุอะไรเลย
     try {
-      const res = await fetch("/api/update", { method: "POST" });
+      const res = await fetch("/api/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target }),
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setStartError(data.error || "เริ่มอัปเดตไม่สำเร็จ");
@@ -156,32 +198,66 @@ export default function UpdateBanner() {
   const running = stepIndex >= 0;
   const percent = running ? Math.round(((stepIndex + 1) / STEPS.length) * 100) : 0;
   const finished = stepIndex === STEPS.length - 1;
+  const versions = info.versions || [];
+  // ติดตั้งทับด้วยเวอร์ชันเดียวกับที่ใช้อยู่ไม่ได้ให้อะไรเพิ่ม แต่กินเวลาปิดเปิด
+  // โปรแกรมเท่าเดิม จึงปิดปุ่มไว้แทนที่จะปล่อยให้กดแล้วงงว่าทำไมไม่มีอะไรเปลี่ยน
+  const sameAsNow = !!selected && selected === info.current;
 
   return (
     <div className="page-card" style={{ marginBottom: 20 }}>
       <div className="section-header">
         <h2 className="section-title" style={{ margin: 0 }}>
-          {running ? "กำลังอัปเดตโปรแกรม" : "มีเวอร์ชันใหม่ให้อัปเดต"}
+          {running
+            ? "กำลังอัปเดตโปรแกรม"
+            : info.hasUpdate
+              ? "มีเวอร์ชันใหม่ให้อัปเดต"
+              : "ติดตั้งเวอร์ชันอื่น"}
         </h2>
-        <span className="status-pill status-pending">{info.latest}</span>
+        <span className="status-pill status-pending">{formatVersion(info.latest || "")}</span>
       </div>
 
       {!running ? (
         <>
           <p style={{ marginTop: 0, color: "var(--muted)" }}>
-            เวอร์ชันที่ใช้อยู่คือ <strong>{info.current || "(ไม่ทราบ)"}</strong> —
-            กดอัปเดตแล้วโปรแกรมจะดาวน์โหลดจาก GitHub ปิดตัวเองและเปิดใหม่โดยอัตโนมัติ
-            ใช้เวลาราวหนึ่งนาที <strong>ค่าตั้งค่าทั้งหมดไม่หาย</strong>
+            เวอร์ชันที่ใช้อยู่คือ <strong>{info.current ? withDate(info.current) : "(ไม่ทราบ)"}</strong> —
+            ไฟล์ติดตั้งดึงจากโฟลเดอร์บน Google Drive ของผู้ดูแล กดแล้วโปรแกรมจะดาวน์โหลด
+            ปิดตัวเองและเปิดใหม่โดยอัตโนมัติ ใช้เวลาราวหนึ่งนาที{" "}
+            <strong>ค่าตั้งค่าทั้งหมดไม่หาย</strong>
             ถ้าอัปเดตล้มเหลวระบบจะย้อนกลับเป็นเวอร์ชันเดิมให้เอง ควรทำตอนไม่มีคนใช้งาน
           </p>
+
+          {versions.length > 1 ? (
+            <div className="label-group" style={{ maxWidth: 420, marginBottom: 14 }}>
+              <label htmlFor="version-pick">เลือกเวอร์ชันที่จะติดตั้ง</label>
+              <select
+                id="version-pick"
+                className="input-field"
+                value={selected}
+                onChange={(e) => setSelected(e.target.value)}
+              >
+                {versions.map((v) => (
+                  <option key={v.tag} value={v.tag}>
+                    {/* เลขสิบหลักติดกันเทียบด้วยสายตายาก จึงเติมวันเวลาที่อ่านออกให้ */}
+                    {formatVersion(v.tag)}
+                    {v.tag === info.latest ? " (ใหม่ที่สุด)" : ""}
+                    {v.tag === info.current ? " — ใช้อยู่ตอนนี้" : ""}
+                    {v.sizeBytes ? ` · ${formatSize(v.sizeBytes)}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
           {startError ? (
             <p style={{ color: "#b42318", marginTop: 0 }}>
               {startError} — ลองใหม่อีกครั้ง ถ้ายังไม่ได้ให้รันตัวช่วยติดตั้งแล้วเลือกเมนู 1 แทน
             </p>
           ) : null}
           <div className="toolbar">
-            <button className="button-primary" onClick={runUpdate}>
-              อัปเดตเป็น {info.latest}
+            <button className="button-primary" onClick={runUpdate} disabled={sameAsNow}>
+              {sameAsNow
+                ? `ใช้เวอร์ชัน ${formatVersion(selected)} อยู่แล้ว`
+                : `ติดตั้งเวอร์ชัน ${formatVersion(selected)}`}
             </button>
           </div>
         </>

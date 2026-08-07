@@ -1,25 +1,7 @@
 import fs from "fs";
 import path from "path";
 import AdmZip from "adm-zip";
-
-const REPO = "tankitkitty/NDP-Kit";
-const LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`;
-
-/**
- * URL ของแพ็กเกจ โดยระบุเลขเวอร์ชันลงไปในที่อยู่ตรงๆ
- *
- * ห้ามใช้ releases/latest/download/... ซึ่งเป็น URL เดียวตายตัวสำหรับทุกเวอร์ชัน
- * เพราะแคชระหว่างทางจะคืนไฟล์เวอร์ชันเก่าที่เคยโหลดผ่าน URL เดียวกันนี้มาก่อน
- * เกิดขึ้นจริงแล้วเมื่อ 5 ส.ค. 2569: เครื่องติดตั้ง v2.0.7 ตอน 10:06 พอกดอัปเดต
- * เป็น v2.0.8 ตอน 10:37 กลับได้ไฟล์ v2.0.7 ตัวเดิมกลับมา ทั้งที่ v2.0.8 ขึ้นแล้ว
- * ตั้งแต่ 10:36 การสลับไฟล์ "สำเร็จ" แต่เวอร์ชันไม่ขยับ และไม่มีอะไรฟ้องเลย
- *
- * หัวขอ Cache-Control: no-cache ไม่พอ เพราะคุมได้แค่ฝั่งเรา ไม่ได้บังคับ proxy
- * หรือ CDN ปลายทาง ส่วน URL ที่ผูกกับเลขเวอร์ชันจะไม่มีทางชนของเก่าตั้งแต่แรก
- */
-export function assetUrlForTag(tag: string): string {
-  return `https://github.com/${REPO}/releases/download/${encodeURIComponent(tag)}/ndp-kit.zip`;
-}
+import { DriveVersion, downloadUrl, listVersions } from "./driveRelease";
 
 /**
  * โปรแกรมถูกติดตั้งโดยตัวช่วยติดตั้งไว้แบบนี้
@@ -129,45 +111,23 @@ export function clearUpdateStage(): void {
   }
 }
 
-/** "v2.0.1" -> [2, 0, 1] ส่วนที่อ่านเป็นตัวเลขไม่ได้ให้เป็น 0 */
-function parseVersion(v: string): number[] {
-  return v
-    .replace(/^v/i, "")
-    .split(".")
-    .map((n) => {
-      const parsed = parseInt(n, 10);
-      return Number.isFinite(parsed) ? parsed : 0;
-    });
-}
-
-/** true เมื่อ candidate ใหม่กว่า current จริงๆ เท่านั้น */
-export function isNewer(candidate: string, current: string): boolean {
-  if (!candidate) return false;
-  if (!current) return true;
-  const a = parseVersion(candidate);
-  const b = parseVersion(current);
-  const len = Math.max(a.length, b.length);
-  for (let i = 0; i < len; i++) {
-    const x = a[i] ?? 0;
-    const y = b[i] ?? 0;
-    if (x !== y) return x > y;
-  }
-  return false;
-}
+// การเทียบเลขเวอร์ชันอยู่ที่ lib/version.ts ที่เดียว เพราะทั้งฝั่งเซิร์ฟเวอร์
+// ฝั่งเบราว์เซอร์ และตัวอ่านรายการจาก Drive ต้องตัดสินว่า "ใหม่กว่า" ให้ตรงกันเป๊ะ
+// ถ้าแยกกันเขียนแล้วหลุดที่ใดที่หนึ่ง เครื่องจะเทียบผิดโดยไม่มีอะไรฟ้อง
+export { isNewer } from "./version";
 
 /**
- * ผลการถาม GitHub ครั้งล่าสุด เก็บไว้กันถามซ้ำถี่เกินจำเป็น
+ * รายการเวอร์ชันที่อ่านมาครั้งล่าสุด เก็บไว้กันถามซ้ำถี่เกินจำเป็น
  *
- * แถบเมนูด้านซ้ายแสดงสถานะเวอร์ชันอยู่ทุกหน้า ถ้าถาม GitHub ใหม่ทุกครั้งที่ผู้ใช้
- * เปลี่ยนหน้า จะชนเพดาน 60 ครั้งต่อชั่วโมงของผู้ใช้ที่ไม่ได้ล็อกอิน แล้ว GitHub จะ
- * ตอบ 403 ทำให้ขึ้นข้อความผิดพลาดทั้งที่ไม่มีอะไรเสีย
+ * แถบเมนูด้านซ้ายแสดงสถานะเวอร์ชันอยู่ทุกหน้า ถ้าไปถามใหม่ทุกครั้งที่ผู้ใช้เปลี่ยน
+ * หน้า ก็เป็นการยิงคำขอออกเน็ตทิ้งเปล่าๆ ทั้งวันโดยไม่ได้อะไรเพิ่ม เวอร์ชันใหม่
+ * ออกไม่กี่ครั้งต่อสัปดาห์ ไม่มีเหตุต้องรู้เร็วกว่านี้ และผู้ใช้กดปุ่มตรวจเองได้ทุกเมื่อ
  *
- * เพดานนั้นนับ "ต่อหมายเลข IP" ไม่ใช่ต่อเครื่อง หน่วยบริการที่ลงหลายเครื่องออกเน็ต
- * ผ่าน IP สาธารณะเดียวกันจึงแชร์โควตาก้อนเดียวกันทั้งหน่วย ยิ่งลงหลายเครื่องยิ่ง
- * หมดเร็ว จึงพักค่าไว้ยาว 6 ชั่วโมง — เวอร์ชันใหม่ออกไม่กี่ครั้งต่อสัปดาห์
- * ไม่มีความจำเป็นต้องรู้ภายในห้านาที และผู้ใช้ยังกดปุ่มตรวจเองได้ทุกเมื่อ
+ * เดิมที่ต้องพักไว้นานเพราะ GitHub จำกัด 60 ครั้งต่อชั่วโมงต่อ IP ซึ่งทั้งหน่วยแชร์กัน
+ * ตอนนี้ย้ายมาอ่านจาก Drive แล้วไม่มีเพดานแบบนั้น แต่ยังพักไว้เท่าเดิมเพราะเหตุผล
+ * เรื่องความจำเป็นข้างต้นยังอยู่ และหน่วยบริการหลายแห่งเน็ตช้า
  */
-let cachedTag = "";
+let cachedVersions: DriveVersion[] = [];
 let cachedAt = 0;
 const TAG_CACHE_MS = 6 * 60 * 60 * 1000;
 
@@ -175,27 +135,40 @@ const TAG_CACHE_MS = 6 * 60 * 60 * 1000;
  * เวลาที่ถามแล้วล้มเหลวครั้งล่าสุด — ใช้หยุดการถามซ้ำระหว่างที่ยังมีปัญหา
  *
  * เดิมเมื่อถามไม่สำเร็จจะไม่พักอะไรไว้เลย ทุกครั้งที่มีคนเปิดหน้าเว็บจึงยิงถาม
- * ใหม่ทันที ซึ่งกลับหัวกลับหางกับสิ่งที่ควรทำ: ตอนโดน GitHub จำกัดเพราะถามถี่ไป
+ * ใหม่ทันที ซึ่งกลับหัวกลับหางกับสิ่งที่ควรทำ: ตอนปลายทางมีปัญหาอยู่แล้ว
  * ระบบจะยิ่งถามถี่ขึ้นอีก และไม่มีทางหลุดออกจากสภาพนั้นเองเลย
  */
 let failedAt = 0;
 let failedMessage = "";
 const FAIL_BACKOFF_MS = 30 * 60 * 1000;
 
-export async function fetchLatestVersion(force = false): Promise<string> {
+/**
+ * รายการเวอร์ชันทั้งหมดที่มีให้ติดตั้ง เรียงจากใหม่ไปเก่า
+ *
+ * คืนทั้งรายการไม่ใช่แค่ตัวล่าสุด เพราะหน้าเว็บให้ผู้ดูแลเลือกเวอร์ชันที่จะติดตั้งเองได้
+ * เช่นเวอร์ชันใหม่มีปัญหาแล้วอยากถอยกลับไปตัวก่อนหน้า
+ */
+export async function fetchVersions(force = false): Promise<DriveVersion[]> {
   if (!force) {
-    if (cachedTag && Date.now() - cachedAt < TAG_CACHE_MS) return cachedTag;
-    // ยังอยู่ในช่วงพักหลังถามไม่สำเร็จ — ตอบด้วยเหตุผลเดิมโดยไม่ไปรบกวน GitHub ซ้ำ
+    if (cachedVersions.length && Date.now() - cachedAt < TAG_CACHE_MS) return cachedVersions;
+    // ยังอยู่ในช่วงพักหลังถามไม่สำเร็จ — ตอบด้วยเหตุผลเดิมโดยไม่ไปยิงซ้ำ
     if (failedAt && Date.now() - failedAt < FAIL_BACKOFF_MS) {
       throw new Error(failedMessage || "ตรวจสอบเวอร์ชันใหม่ไม่สำเร็จ");
     }
   }
 
   try {
-    const tag = await requestLatestVersion();
+    const versions = await listVersions();
+    if (versions.length === 0) {
+      // อ่านโฟลเดอร์ได้แต่ไม่มีไฟล์ที่ชื่อบอกเลขเวอร์ชันเลย มักแปลว่าผู้ดูแลยังไม่ได้
+      // อัปไฟล์ หรืออัปแล้วตั้งชื่อไม่มีเลขเวอร์ชัน บอกให้ตรงจะได้แก้ถูกจุด
+      throw new Error("ยังไม่มีไฟล์เวอร์ชันในโฟลเดอร์ที่กำหนด กรุณาแจ้งผู้ดูแลระบบ");
+    }
+    cachedVersions = versions;
+    cachedAt = Date.now();
     failedAt = 0;
     failedMessage = "";
-    return tag;
+    return versions;
   } catch (error: any) {
     failedAt = Date.now();
     failedMessage = String(error?.message || error);
@@ -203,30 +176,19 @@ export async function fetchLatestVersion(force = false): Promise<string> {
   }
 }
 
-async function requestLatestVersion(): Promise<string> {
-  const res = await fetch(LATEST_API, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      // GitHub ปฏิเสธคำขอที่ไม่มี User-Agent
-      "User-Agent": "ndp-kit-updater",
-    },
-    signal: AbortSignal.timeout(15000),
-  });
-  // 404 ที่ปลายทางนี้แปลว่ายังไม่มี release เผยแพร่เลย (มีแต่ git tag ซึ่งคนละอย่างกัน)
-  // ไม่ใช่ความผิดของเครื่องหน่วยบริการ จึงบอกให้ตรงว่าเกิดอะไรขึ้น
-  if (res.status === 404) {
-    throw new Error("ยังไม่มีเวอร์ชันเผยแพร่บน GitHub กรุณาแจ้งผู้ดูแลระบบ");
-  }
-  if (res.status === 403) {
-    throw new Error("GitHub จำกัดจำนวนครั้งการเรียกชั่วคราว กรุณาลองใหม่ในอีกสักครู่");
-  }
-  if (!res.ok) throw new Error(`GitHub ตอบกลับรหัส ${res.status}`);
-  const data: any = await res.json();
-  const tag = String(data?.tag_name || "").trim();
-  if (!tag) throw new Error("ไม่พบเลขเวอร์ชันในข้อมูลที่ GitHub ส่งกลับมา");
-  cachedTag = tag;
-  cachedAt = Date.now();
-  return tag;
+export async function fetchLatestVersion(force = false): Promise<string> {
+  const versions = await fetchVersions(force);
+  return versions[0].tag;
+}
+
+/** หาไฟล์ของเวอร์ชันที่ระบุ ใช้ตอนจะดาวน์โหลดจริง */
+async function findVersion(tag: string): Promise<DriveVersion> {
+  // ถามสดเสมอ เพราะกำลังจะโหลดไฟล์จริง ถ้าใช้รายการที่พักไว้แล้วผู้ดูแลเพิ่งลบ
+  // หรือเปลี่ยนไฟล์ไป จะได้รหัสไฟล์ที่ใช้ไม่ได้แล้วไปตายกลางทางแทน
+  const versions = await fetchVersions(true);
+  const hit = versions.find((v) => v.tag === tag);
+  if (!hit) throw new Error(`ไม่พบไฟล์ของเวอร์ชัน ${tag} ในโฟลเดอร์ที่กำหนด`);
+  return hit;
 }
 
 /**
@@ -250,9 +212,14 @@ export async function stageUpdate(tag: string): Promise<void> {
   try {
     writeUpdateStage("downloading");
 
-    const res = await fetch(assetUrlForTag(tag), {
+    // หารหัสไฟล์บน Drive ของเวอร์ชันนี้ก่อน ที่อยู่ดาวน์โหลดผูกกับรหัสไฟล์ซึ่งไม่ซ้ำ
+    // กันเลยทุกไฟล์ จึงไม่มีทางที่แคชระหว่างทางจะคืนไฟล์ของเวอร์ชันอื่นกลับมา
+    const version = await findVersion(tag);
+
+    const res = await fetch(downloadUrl(version), {
       headers: { "User-Agent": "ndp-kit-updater", "Cache-Control": "no-cache" },
       signal: AbortSignal.timeout(600000),
+      redirect: "follow",
     });
     if (!res.ok) throw new Error(`ดาวน์โหลดไม่สำเร็จ ปลายทางตอบกลับรหัส ${res.status}`);
 
@@ -260,6 +227,9 @@ export async function stageUpdate(tag: string): Promise<void> {
     if (buf.length < 100000) {
       // ไฟล์จริงมีขนาดหลายเมกะไบต์ ถ้าได้มานิดเดียวแปลว่าโดน proxy ส่งหน้า error
       // หรือหน้า login ของระบบกรองเว็บกลับมาแทนไฟล์จริง
+      //
+      // ฝั่ง Drive ยังมีอีกกรณีคือไฟล์ใหญ่เกินราว 25 MB ซึ่ง Drive จะส่งหน้ายืนยัน
+      // ว่าสแกนไวรัสไม่ได้กลับมาเป็น HTML แทนไฟล์ ด่านนี้ดักไว้ให้แล้วเช่นกัน
       throw new Error("ไฟล์ที่ได้มาเล็กผิดปกติ อาจถูกระบบกรองเว็บของหน่วยงานขวางไว้");
     }
     fs.writeFileSync(zipPath, buf);
@@ -306,8 +276,8 @@ export async function stageUpdate(tag: string): Promise<void> {
  * หรือ path แบบเต็ม (C:\...) มันจะเขียนทับไฟล์นอก app.new ให้เลย ซึ่งกลายเป็นการ
  * รันโค้ดบนเครื่องหน่วยบริการได้ทันทีในรอบเปิดโปรแกรมถัดไป
  *
- * ต่อให้ไฟล์มาจาก GitHub ผ่าน https ก็ยังต้องตรวจ เพราะถ้าบัญชีผู้ดูแลถูกยึด
- * หรือมีใครแนบไฟล์ปลอมกับ release ได้ ทุกหน่วยบริการจะดึงไปรันพร้อมกันทั้งหมด
+ * ต่อให้ไฟล์มาจาก Google Drive ผ่าน https ก็ยังต้องตรวจ เพราะถ้าบัญชีผู้ดูแลถูกยึด
+ * หรือมีใครอัปไฟล์ปลอมเข้าโฟลเดอร์ได้ ทุกหน่วยบริการจะดึงไปรันพร้อมกันทั้งหมด
  */
 function assertNoPathTraversal(zip: AdmZip, targetDir: string): void {
   const root = path.resolve(targetDir);

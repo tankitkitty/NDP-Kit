@@ -5,7 +5,7 @@ import { getSession } from "../../lib/session";
 import { getAppVersion } from "../../lib/registry";
 import {
   clearUpdateStage,
-  fetchLatestVersion,
+  fetchVersions,
   getInstallRoot,
   hasStagedUpdate,
   isNewer,
@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const current = getAppVersion();
 
   // หน้าเว็บถามขั้นตอนที่กำลังทำอยู่ระหว่างอัปเดต แยกจากการตรวจเวอร์ชันใหม่
-  // เพราะระหว่างนี้ยังไม่ควรไปเรียก GitHub ซ้ำ (ช้าและไม่จำเป็น)
+  // เพราะระหว่างนี้ยังไม่ควรไปอ่านรายการเวอร์ชันซ้ำ (ช้าและไม่จำเป็น)
   if (req.method === "GET" && req.query.stage !== undefined) {
     return res.status(200).json({
       stage: readUpdateStage(),
@@ -40,16 +40,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     try {
       // ?force=1 มาจากปุ่มตรวจสอบเวอร์ชันที่ผู้ใช้กดเอง ต้องได้คำตอบสดไม่ใช่ของที่พักไว้
-      const latest = await fetchLatestVersion(req.query.force !== undefined);
+      const versions = await fetchVersions(req.query.force !== undefined);
+      const latest = versions[0].tag;
       return res.status(200).json({
         supported: true,
         current,
         latest,
         hasUpdate: isNewer(latest, current),
+        // ส่งทั้งรายการไปด้วย เพื่อให้ผู้ดูแลเลือกติดตั้งเวอร์ชันอื่นได้ เช่นถอยกลับ
+        // ไปตัวก่อนหน้าเมื่อเวอร์ชันใหม่มีปัญหา ไม่ต้องรอผู้พัฒนาปล่อยตัวแก้
+        versions: versions.map((v) => ({
+          tag: v.tag,
+          fileName: v.fileName,
+          sizeBytes: v.sizeBytes,
+        })),
       });
     } catch (error: any) {
       return res.status(502).json({
-        error: `ตรวจสอบเวอร์ชันใหม่ไม่สำเร็จ: ${error?.message || "เชื่อมต่อ GitHub ไม่ได้"}`,
+        error: `ตรวจสอบเวอร์ชันใหม่ไม่สำเร็จ: ${error?.message || "เชื่อมต่อ Google Drive ไม่ได้"}`,
       });
     }
   }
@@ -61,16 +69,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // ต้องรู้เลขเวอร์ชันก่อนเริ่ม เพราะ URL ของแพ็กเกจผูกกับเลขเวอร์ชัน (ดู
-    // assetUrlForTag ว่าทำไมถึงใช้ URL กลางไม่ได้) ถ้าถาม GitHub ไม่ได้ก็บอกไปเลย
-    // ตั้งแต่ตอนนี้ ดีกว่าปล่อยให้เริ่มแล้วไปตายกลางทาง
+    // ต้องรู้เลขเวอร์ชันก่อนเริ่ม เพราะที่อยู่ของแพ็กเกจผูกกับไฟล์ของเวอร์ชันนั้น
+    // ถ้าอ่านรายการไม่ได้ก็บอกไปเลยตั้งแต่ตอนนี้ ดีกว่าปล่อยให้เริ่มแล้วไปตายกลางทาง
+    //
+    // ผู้ใช้ระบุเวอร์ชันมาได้ (เลือกเองจากหน้าเว็บ) ถ้าไม่ระบุถือว่าเอาตัวล่าสุด
+    // ต้องตรวจว่าเวอร์ชันที่ขอมามีอยู่จริง ไม่ใช่เชื่อค่าที่ส่งมาจากเบราว์เซอร์ตรงๆ
     let target: string;
     try {
       // กำลังจะดาวน์โหลดจริง ต้องถามสดเสมอ ไม่ใช้ค่าที่พักไว้
-      target = await fetchLatestVersion(true);
+      const versions = await fetchVersions(true);
+      const asked = typeof req.body?.target === "string" ? req.body.target.trim() : "";
+      if (asked) {
+        const hit = versions.find((v) => v.tag === asked);
+        if (!hit) {
+          return res.status(400).json({ error: `ไม่พบเวอร์ชัน ${asked} ในรายการที่ติดตั้งได้` });
+        }
+        target = hit.tag;
+      } else {
+        target = versions[0].tag;
+      }
     } catch (error: any) {
       return res.status(502).json({
-        error: `ตรวจสอบเวอร์ชันใหม่ไม่สำเร็จ: ${error?.message || "เชื่อมต่อ GitHub ไม่ได้"}`,
+        error: `ตรวจสอบเวอร์ชันใหม่ไม่สำเร็จ: ${error?.message || "เชื่อมต่อ Google Drive ไม่ได้"}`,
       });
     }
 

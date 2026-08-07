@@ -1,9 +1,8 @@
 ﻿# =============================================================================
-#  NDP-Kit - ตัวช่วยติดตั้งสำหรับหน่วยบริการ (รันด้วย Node.js ไม่ใช้ Docker)
+#  NDP-Kit - ตัวช่วยติดตั้งสำหรับหน่วยบริการ
 #
-#  ไฟล์นี้ต้องบันทึกเป็น UTF-8 พร้อม BOM เสมอ เพราะ Windows PowerShell 5.1 จะอ่าน
-#  ไฟล์ที่ไม่มี BOM เป็นรหัส ANSI แล้วภาษาไทยจะเพี้ยนทั้งไฟล์
-#  ส่วน ndp-kit-setup.bat ต้องเป็น ASCII ล้วน ห้ามมีภาษาไทยเด็ดขาด
+#  เวลาแก้ไฟล์นี้: ต้องบันทึกเป็น UTF-8 พร้อม BOM เสมอ ไม่งั้นภาษาไทยเพี้ยนทั้งไฟล์
+#  ส่วน ndp-kit-setup.bat ต้องเป็น ASCII ล้วน ห้ามมีภาษาไทย
 # =============================================================================
 
 $ErrorActionPreference = 'Stop'
@@ -11,26 +10,21 @@ $ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest เร็วข�
 
 $APP_NAME     = 'NDP-Kit'
 $INSTALL_DIR  = 'C:\NDP-Kit'
-# ชื่อโฟลเดอร์เดิมก่อนเปลี่ยนมาใช้ขีดกลาง เครื่องที่ติดตั้งไว้ก่อนหน้านี้จะถูกย้ายมา
-# ให้อัตโนมัติตอนกดเมนู 1 (ดู Move-OldInstall) จะได้ไม่เกิดสองชุดแย่งพอร์ตกัน
+# ชื่อโฟลเดอร์เดิม เครื่องที่ติดตั้งไว้ก่อนจะถูกย้ายมาอัตโนมัติ (ดู Move-OldInstall)
 $OLD_INSTALL_DIR = 'C:\NDPKit'
-$REPO         = 'tankitkitty/NDP-Kit'
-$LATEST_API   = "https://api.github.com/repos/$REPO/releases/latest"
+# แหล่งไฟล์ติดตั้ง: โฟลเดอร์เวอร์ชันบน Google Drive ของผู้ดูแล
+# เลขเวอร์ชันอ่านจากชื่อไฟล์ เช่น ndp-kit-6908070601.zip
+$DRIVE_FOLDER_ID = '1DBAV9DkMKxh0O-K_O54XgAd6JfQUYfRq'
+$DRIVE_LIST_URL  = "https://drive.google.com/embeddedfolderview?id=$DRIVE_FOLDER_ID"
 $APP_ZIP_NAME = 'ndp-kit.zip'
-# ที่อยู่สำรอง ใช้เมื่อถาม API ไม่ได้เท่านั้น (ดูเหตุผลที่ Invoke-Install)
-$APP_URL      = "https://github.com/$REPO/releases/latest/download/$APP_ZIP_NAME"
-# ไฟล์สำหรับติดตั้งแบบไม่ผ่าน GitHub (เมนู 6) ตั้งชื่อไม่ให้ซ้ำกับ $APP_ZIP_NAME
-# โดยตั้งใจ เพราะไฟล์ชื่อ ndp-kit.zip ที่ค้างอยู่ข้างตัวช่วยติดตั้งจะถูกลบทิ้งเสมอ
-# (ดูเหตุผลที่ Invoke-Install) ถ้าใช้ชื่อเดียวกันจะกลายเป็นเปิดกับดักเดิมกลับมา
+# ไฟล์สำหรับติดตั้งแบบไม่ต่ออินเทอร์เน็ต (เมนู 6) ต้องใช้ชื่อคนละชื่อกับ $APP_ZIP_NAME
 $OFFLINE_ZIP_NAME = 'ndp-kit-offline.zip'
 $NODE_VER     = 'v24.19.0'
 $NODE_ZIP     = "node-$NODE_VER-win-x64.zip"
 $NODE_URL     = "https://nodejs.org/dist/$NODE_VER/$NODE_ZIP"
 $NODE_SHA_URL = "https://nodejs.org/dist/$NODE_VER/SHASUMS256.txt"
 $PORTS        = @(3000, 3013, 3113, 3213)
-# คงชื่อ task เดิมไว้แม้โฟลเดอร์จะเปลี่ยนชื่อ เพราะการเปลี่ยนชื่อ task จะทำให้ task
-# เก่าค้างอยู่ในเครื่องโดยชี้ไปพาธที่ถูกย้ายไปแล้ว แล้วเด้ง error ทุกครั้งที่ล็อกอิน
-# ใช้ชื่อเดิมทำให้ตัวติดตั้งเขียนทับ task เดิมด้วยพาธใหม่ให้เองในขั้นตอนปกติ
+# ห้ามเปลี่ยนชื่อ task ไม่งั้น task เก่าจะค้างอยู่และชี้ไปพาธที่ย้ายไปแล้ว
 $TASK_NAME    = 'NDPKit'
 
 $NodeExe   = Join-Path $INSTALL_DIR 'node\node.exe'
@@ -70,10 +64,7 @@ function Pause-Back {
   [void](Read-Host)
 }
 
-# รหัสสำหรับตั้งค่าครั้งแรก - กันคนอื่นในวง LAN ชิงเข้าหน้าตั้งค่าก่อนเจ้าหน้าที่
-# แล้วชี้ฐานข้อมูลไปเครื่องของตัวเอง (ดู lib/authGuard.ts ฝั่งโปรแกรม)
-# ชุดตัวอักษร 32 ตัวนี้ตัด I O 0 1 ออกเพราะผู้ใช้ต้องอ่านจากจอแล้วพิมพ์เอง
-# และ 256 หาร 32 ลงตัว การสุ่มด้วย % จึงไม่เอนเอียง
+# รหัสสำหรับตั้งค่าครั้งแรก - ตัดตัวอักษรที่อ่านสับสน (I O 0 1) ออก
 function New-SetupToken {
   $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   $bytes = New-Object byte[] 8
@@ -83,11 +74,9 @@ function New-SetupToken {
 }
 
 # ------------------------------------------------------------------ ดาวน์โหลด
-# ไฟล์ที่วางไว้ข้างตัวช่วยติดตั้งมาก่อนเสมอ เพื่อให้เครื่องที่เน็ตช้าหรือไม่มีเน็ต
-# ติดตั้งได้ โดยผู้ดูแลก๊อปไฟล์ใส่ USB ไปพร้อมกัน
+# ไฟล์ที่วางไว้ข้างตัวช่วยติดตั้งมาก่อนเสมอ สำหรับเครื่องที่เน็ตช้าหรือไม่มีเน็ต
 function Find-LocalFile($name) {
-  # ว่างได้เมื่อรันแบบบรรทัดเดียว (irm ... | iex) เพราะไม่มีไฟล์อยู่บนดิสก์
-  # กรณีนั้นไม่มีไฟล์ข้างๆ ให้หาอยู่แล้ว ข้ามไปดาวน์โหลดตามปกติ
+  # ว่างเมื่อรันแบบ irm ... | iex ซึ่งไม่มีไฟล์อยู่บนดิสก์
   if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) { return $null }
   $p = Join-Path $PSScriptRoot $name
   if (Test-Path $p) { return $p }
@@ -97,8 +86,7 @@ function Find-LocalFile($name) {
 function Get-RemoteFile($url, $dest, $label) {
   Step "กำลังดาวน์โหลด$label ..."
   try {
-    # สั่งไม่ให้ใช้ของที่แคชไว้ เพราะเครือข่ายโรงพยาบาลหลายแห่งมี proxy คั่นกลาง
-    # ซึ่งอาจคืนไฟล์เวอร์ชันเก่าที่เคยโหลดผ่านมาก่อนแทนตัวล่าสุด
+    # กัน proxy ของเครือข่ายคืนไฟล์เก่าที่แคชไว้
     Invoke-WebRequest $url -OutFile $dest -UseBasicParsing -TimeoutSec 600 `
       -Headers @{ 'Cache-Control' = 'no-cache'; 'Pragma' = 'no-cache' }
     return $true
@@ -107,6 +95,69 @@ function Get-RemoteFile($url, $dest, $label) {
     Step "  สาเหตุ: $($_.Exception.Message)"
     return $false
   }
+}
+
+# ------------------------------------------------------- รายการเวอร์ชันบน Drive
+#
+# คืนรายการเรียงจากใหม่ไปเก่า แต่ละตัวมี Tag / FileId / FileName
+# ถ้าอ่านไม่ได้ ยังติดตั้งได้ด้วยเมนู 6 เสมอ
+function Get-DriveVersions {
+  try {
+    $html = (Invoke-WebRequest $DRIVE_LIST_URL -UseBasicParsing -TimeoutSec 60 `
+      -Headers @{ 'Cache-Control' = 'no-cache' }).Content
+  } catch {
+    throw "อ่านรายการเวอร์ชันจาก Google Drive ไม่ได้: $($_.Exception.Message)"
+  }
+
+  $out = @()
+  $re = 'id="entry-([^"]+)"[\s\S]{0,2000}?flip-entry-title[^>]*>([^<]+)<'
+  foreach ($m in [regex]::Matches($html, $re)) {
+    $id   = $m.Groups[1].Value
+    $name = [System.Net.WebUtility]::HtmlDecode($m.Groups[2].Value).Trim()
+    if ($name -notmatch '\.zip$') { continue }
+
+    # แบบปัจจุบัน: เลขสิบหลัก = ปีเดือนวันชั่วโมงนาทีที่สร้างแพ็กเกจ
+    $dated = [regex]::Match($name, '(?<!\d)(\d{10})(?!\d)')
+    if ($dated.Success) {
+      $tag  = $dated.Groups[1].Value
+      $sort = [int64]$tag
+    } else {
+      # แบบเก่า x.y.z ยังอ่านได้ ยุบเป็นตัวเลขก้อนเดียวเพื่อให้เรียงข้ามสองรูปแบบได้
+      # ค่าสูงสุด 999,999,999 น้อยกว่าเลขแบบเวลาเสมอ = แบบเวลาใหม่กว่าเสมอ
+      $v = [regex]::Match($name, '(\d+)\.(\d+)\.(\d+)')
+      if (-not $v.Success) { continue }
+      $tag  = "v$($v.Groups[1].Value).$($v.Groups[2].Value).$($v.Groups[3].Value)"
+      $sort = [int64]$v.Groups[1].Value * 1000000 +
+              [int64]$v.Groups[2].Value * 1000 +
+              [int64]$v.Groups[3].Value
+    }
+
+    $out += [PSCustomObject]@{
+      Tag      = $tag
+      Sort     = $sort
+      FileId   = $id
+      FileName = $name
+    }
+  }
+
+  # เวอร์ชันซ้ำให้เหลือตัวเดียว ไม่งั้นรายการที่ให้ผู้ใช้เลือกจะมีของซ้ำกัน
+  return @($out | Sort-Object Sort -Descending | Group-Object Tag | ForEach-Object { $_.Group[0] })
+}
+
+# ที่อยู่ดาวน์โหลดผูกกับรหัสไฟล์ ซึ่งไม่ซ้ำกันทุกไฟล์ แคชระหว่างทางจึงคืนไฟล์ผิดตัวไม่ได้
+function Get-DriveDownloadUrl($fileId) {
+  return "https://drive.google.com/uc?export=download&id=$fileId"
+}
+
+# แปลงเลขเวอร์ชันสิบหลักให้คนอ่านออก เช่น 6908060553 -> "6 ส.ค. 69 05:53 น."
+# อ่านไม่ออกให้คืนค่าเดิม ไม่ต้องเดา
+function Format-VersionText($tag) {
+  if ($tag -notmatch '^\d{10}$') { return $tag }
+  $months = @('ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.')
+  $mm = [int]$tag.Substring(2, 2)
+  $dd = [int]$tag.Substring(4, 2)
+  if ($mm -lt 1 -or $mm -gt 12 -or $dd -lt 1) { return $tag }
+  return "$dd $($months[$mm - 1]) $($tag.Substring(0,2)) $($tag.Substring(6,2)):$($tag.Substring(8,2)) น."
 }
 
 # ตรวจว่าไฟล์ Node ที่ได้มาตรงกับค่าที่ nodejs.org ประกาศไว้จริง
@@ -187,10 +238,8 @@ function Stop-App([string]$root = $INSTALL_DIR) {
   return $true
 }
 
-# เดิมโปรแกรมติดตั้งที่ C:\NDPKit ต่อมาเปลี่ยนเป็น C:\NDP-Kit ให้อ่านง่ายขึ้น
-# ถ้าปล่อยไว้เฉยๆ ตัวติดตั้งจะสร้างชุดใหม่ขึ้นมาอีกชุด แล้วชุดเก่าที่ยังทำงานอยู่
-# จะจองพอร์ตไว้ ทำให้ชุดใหม่เปิดไม่ขึ้น และค่าตั้งค่าเดิมก็ค้างอยู่ที่เก่า
-# จึงย้ายทั้งโฟลเดอร์มาให้ ค่าตั้งค่าและ log เดิมตามมาครบ
+# ย้ายการติดตั้งเดิมจาก C:\NDPKit มาที่ C:\NDP-Kit พร้อมค่าตั้งค่าและ log
+# ถ้าไม่ย้าย จะมีสองชุดแย่งพอร์ตกันและค่าตั้งค่าค้างอยู่ที่เก่า
 function Move-OldInstall {
   if (-not (Test-Path $OLD_INSTALL_DIR)) { return }
 
@@ -256,10 +305,7 @@ function Get-InstalledVersion {
 }
 
 # อ่านเลขเวอร์ชันจากไฟล์ zip โดยไม่ต้องแตกไฟล์ออกมาก่อน
-#
-# ใช้ตอนติดตั้งจากไฟล์ที่ถือมาเอง เพื่อให้ผู้ดูแลเห็นก่อนกดยืนยันว่าไฟล์ในมือ
-# เป็นเวอร์ชันอะไรกันแน่ - เป็นด่านกันไม่ให้เอาไฟล์เก่าไปทับของใหม่โดยไม่รู้ตัว
-# ซึ่งเป็นปัญหาเดียวกับที่ทำให้ต้องเลิกรับไฟล์ ndp-kit.zip ข้างตัวช่วยติดตั้ง
+# ให้ผู้ดูแลเห็นก่อนกดยืนยันว่าไฟล์ในมือเป็นเวอร์ชันอะไร กันเอาของเก่าไปทับของใหม่
 function Get-ZipVersion($zipPath) {
   try {
     Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
@@ -276,10 +322,8 @@ function Get-ZipVersion($zipPath) {
 }
 
 # ----------------------------------------------------------------- ติดตั้ง
-#
-# $LocalZip ว่าง = ติดตั้งตามปกติ ดาวน์โหลดเวอร์ชันล่าสุดจาก GitHub (เมนู 1)
-# $LocalZip มีค่า = ติดตั้งจากไฟล์ที่ผู้ดูแลถือมาเอง (เมนู 6) ใช้เมื่อ GitHub
-# ใช้ไม่ได้ หรือเครื่องนั้นออกอินเทอร์เน็ตไม่ได้ ที่เหลือทำเหมือนกันทุกขั้นตอน
+# $LocalZip ว่าง = โหลดจาก Drive (เมนู 1) มีค่า = ใช้ไฟล์ในเครื่อง (เมนู 6)
+# ที่เหลือทำเหมือนกันทุกขั้นตอน
 function Invoke-Install {
   param([string]$LocalZip = '')
 
@@ -294,11 +338,11 @@ function Invoke-Install {
     Head 'ขั้นตอนที่ 2/5 : ใช้ไฟล์โปรแกรมที่เตรียมมา'
     Step "ไฟล์ : $LocalZip"
     $inZip = Get-ZipVersion $LocalZip
-    if ($inZip) { Ok "ไฟล์นี้เป็นเวอร์ชัน $inZip" }
+    if ($inZip) { Ok "ไฟล์นี้เป็นเวอร์ชัน $inZip  $(Format-VersionText $inZip)" }
     else { Warn 'อ่านเลขเวอร์ชันในไฟล์ไม่ได้ - ไฟล์อาจไม่ใช่แพ็กเกจของ NDP-Kit' }
 
     $now = Get-InstalledVersion
-    if ($now) { Step "เครื่องนี้ติดตั้งไว้ : $now" }
+    if ($now) { Step "เครื่องนี้ติดตั้งไว้ : $now  $(Format-VersionText $now)" }
     Write-Host ''
     if ((Read-Host '  พิมพ์ y แล้ว Enter เพื่อติดตั้งไฟล์นี้') -ne 'y') {
       Warn 'ยกเลิกแล้ว ไม่มีอะไรถูกเปลี่ยน'
@@ -313,53 +357,68 @@ function Invoke-Install {
   } else {
     Head 'ขั้นตอนที่ 2/5 : ดาวน์โหลดตัวโปรแกรม'
 
-    # ตัวโปรแกรมดาวน์โหลดใหม่ทุกครั้งเสมอ ไม่รับไฟล์ที่วางไว้ในเครื่องอีกต่อไป
-    #
-    # เดิมรองรับไว้เพื่อติดตั้งแบบออฟไลน์ แต่กลายเป็นกับดัก เพราะไฟล์เก่าที่ค้างอยู่
-    # ข้างตัวช่วยติดตั้งจะถูกหยิบมาใช้ทุกครั้ง เครื่องนั้นจึงติดอยู่กับเวอร์ชันเก่าถาวร
-    # โดยไม่มีอะไรบอกผู้ใช้ว่าทำไมกดอัปเดตแล้วไม่ได้ตัวใหม่
-    #
-    # การติดตั้งแบบออฟไลน์ย้ายไปอยู่เมนู 6 แทน ซึ่งต้องเลือกเองและใช้ไฟล์คนละชื่อ
-    # จึงไม่มีทางเกิดขึ้นโดยที่ผู้ใช้ไม่ได้ตั้งใจ
+    # เมนูนี้โหลดใหม่ทุกครั้ง ไม่หยิบไฟล์ที่ค้างในเครื่อง (ใช้ไฟล์ในเครื่อง = เมนู 6)
     $stale = Find-LocalFile $APP_ZIP_NAME
     if ($stale) {
       Warn 'พบไฟล์ ndp-kit.zip เก่าค้างอยู่ข้างตัวช่วยติดตั้ง - ไม่ใช้แล้วและกำลังลบทิ้ง'
       try { Remove-Item $stale -Force; Ok 'ลบไฟล์เก่าเรียบร้อย' } catch { Warn 'ลบไม่สำเร็จ - ลบเองได้ ไฟล์นี้ไม่ถูกใช้แล้ว' }
     }
 
-    # ถามเลขเวอร์ชันล่าสุดก่อน แล้วโหลดจาก URL ที่ระบุเลขเวอร์ชันลงไปตรงๆ
-    #
-    # URL กลาง releases/latest/download/... ใช้ที่อยู่เดียวกันทุกเวอร์ชัน แคชระหว่างทาง
-    # จึงคืนไฟล์เก่าที่เคยโหลดผ่านที่อยู่เดียวกันนี้มาก่อนได้ เกิดขึ้นจริงแล้วเมื่อ
-    # 5 ส.ค. 2569 ตอนอัปเดตจากหน้าเว็บ กดแล้วได้ไฟล์เวอร์ชันเดิมกลับมาโดยไม่มีอะไรฟ้อง
-    # ถ้าถาม API ไม่ได้ก็ถอยไปใช้ URL กลางเหมือนเดิม ดีกว่าติดตั้งไม่ได้เลย
-    $url = $APP_URL
+    # Enter = ตัวใหม่ที่สุด เลือกเองได้เมื่อต้องถอยกลับไปเวอร์ชันก่อนหน้า
+    $versions = $null
     try {
-      $rel = Invoke-RestMethod $LATEST_API -TimeoutSec 30 -Headers @{ 'User-Agent' = 'ndp-kit-setup' }
-      if ($rel.tag_name) {
-        $url = "https://github.com/$REPO/releases/download/$($rel.tag_name)/$APP_ZIP_NAME"
-        Step "  เวอร์ชันล่าสุดคือ $($rel.tag_name)"
-      }
+      $versions = Get-DriveVersions
     } catch {
-      Warn 'ถามเลขเวอร์ชันล่าสุดไม่ได้ - จะโหลดจากที่อยู่กลางแทน'
-    }
-
-    if (-not (Get-RemoteFile $url $zip 'ตัวโปรแกรมเวอร์ชันล่าสุด')) {
+      Err $_.Exception.Message
       Step ''
-      Step 'ตรวจสอบว่าเครื่องนี้เข้าอินเทอร์เน็ตได้ และเปิดเข้า github.com ได้'
-      Step 'แล้วลองใหม่อีกครั้ง'
-      Step 'ถ้า GitHub ใช้ไม่ได้ ให้ขอไฟล์ติดตั้งจากผู้ดูแลแล้วใช้เมนู 6 แทน'
+      Step 'ตรวจสอบว่าเครื่องนี้เข้าอินเทอร์เน็ตได้ และเปิด drive.google.com ได้'
+      Step 'ถ้าเข้าไม่ได้ ให้ขอไฟล์ติดตั้งจากผู้ดูแลแล้วใช้เมนู 6 แทน'
       Pause-Back; return
     }
-    Ok 'ได้ไฟล์โปรแกรมเวอร์ชันล่าสุดแล้ว'
+
+    if ($versions.Count -eq 0) {
+      Err 'ไม่พบไฟล์เวอร์ชันในโฟลเดอร์ของผู้ดูแล'
+      Step '  ไฟล์ต้องเป็น .zip และมีเลขเวอร์ชันในชื่อ เช่น ndp-kit-v2.0.25.zip'
+      Step '  แจ้งผู้ดูแลระบบให้ตรวจสอบ'
+      Pause-Back; return
+    }
+
+    $pick = $versions[0]
+    if ($versions.Count -gt 1) {
+      Step 'เวอร์ชันที่ติดตั้งได้'
+      for ($i = 0; $i -lt $versions.Count; $i++) {
+        $mark = if ($i -eq 0) { '  (ใหม่ที่สุด)' } else { '' }
+        Write-Host "    [$($i + 1)] $($versions[$i].Tag)   $(Format-VersionText ($versions[$i].Tag))$mark"
+      }
+      Write-Host ''
+      $ans = Read-Host "  เลือกหมายเลข แล้วกด Enter (กด Enter เฉยๆ = $($versions[0].Tag))"
+      if ($ans) {
+        $n = 0
+        if ([int]::TryParse($ans.Trim(), [ref]$n) -and $n -ge 1 -and $n -le $versions.Count) {
+          $pick = $versions[$n - 1]
+        } else {
+          Warn 'หมายเลขไม่ถูกต้อง - จะติดตั้งเวอร์ชันใหม่ที่สุดแทน'
+        }
+      }
+    }
+    Step "  จะติดตั้ง $($pick.Tag)  $(Format-VersionText ($pick.Tag))"
+    Step "  จากไฟล์ $($pick.FileName)"
+
+    if (-not (Get-RemoteFile (Get-DriveDownloadUrl $pick.FileId) $zip "ตัวโปรแกรม $($pick.Tag)")) {
+      Step ''
+      Step 'ตรวจสอบว่าเครื่องนี้เข้าอินเทอร์เน็ตได้ และเปิด drive.google.com ได้'
+      Step 'แล้วลองใหม่อีกครั้ง'
+      Step 'ถ้า Google Drive ใช้ไม่ได้ ให้ขอไฟล์ติดตั้งจากผู้ดูแลแล้วใช้เมนู 6 แทน'
+      Pause-Back; return
+    }
+    Ok "ได้ไฟล์โปรแกรม $($pick.Tag) แล้ว"
   }
 
   Head 'ขั้นตอนที่ 3/5 : ติดตั้งลงเครื่อง'
   $wasRunning = Stop-App
   if ($wasRunning) { Ok 'ปิดโปรแกรมตัวเดิมที่กำลังทำงานอยู่แล้ว' }
 
-  # ค่าตั้งค่าของหน่วยบริการอยู่ใน app\data ต้องยกออกมาพักไว้ก่อนลบของเก่า
-  # ไม่งั้นอัปเดตทีเดียวค่า MySQL หายหมด ต้องตั้งใหม่ทุกครั้ง
+  # ยก app\data ออกมาพักก่อนลบของเก่า ไม่งั้นค่าตั้งค่าหายทุกครั้งที่อัปเดต
   $isFresh = -not (Test-Path (Join-Path $DataDir 'dbconfig.json'))
   $dataBackup = Join-Path $env:TEMP 'ndpkit-data-keep'
   Remove-Item $dataBackup -Recurse -Force -ErrorAction SilentlyContinue
@@ -369,8 +428,7 @@ function Invoke-Install {
   }
 
   try {
-    # ล้างของค้างจากการอัปเดตในหน้าเว็บที่ยังสลับไฟล์ไม่เสร็จ ไม่งั้น start.cmd
-    # จะเอา app.new เก่ากว่ามาทับตัวที่เพิ่งติดตั้งใหม่ตอนเปิดโปรแกรมครั้งถัดไป
+    # ล้าง app.new ที่ค้าง ไม่งั้น start.cmd จะเอาของเก่ามาทับตัวที่เพิ่งติดตั้ง
     Remove-Item (Join-Path $INSTALL_DIR 'app.new') -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item (Join-Path $INSTALL_DIR 'app.old') -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item (Join-Path $INSTALL_DIR 'logs\update-status.txt') -Force -ErrorAction SilentlyContinue
@@ -413,8 +471,7 @@ function Invoke-Install {
   $setupToken = New-SetupToken
   New-Item -ItemType Directory -Path (Join-Path $INSTALL_DIR 'logs') -Force | Out-Null
 
-  # start.cmd เขียนเป็น ASCII ล้วนด้วยเหตุผลเดียวกับ ndp-kit-setup.bat
-  # (cmd.exe อ่านทีละไบต์ตาม code page ภาษาไทยจะทำให้ตัวแยกคำสั่งเลื่อนตำแหน่ง)
+  # start.cmd ต้องเป็น ASCII ล้วน ห้ามมีภาษาไทย (เหตุผลเดียวกับ .bat)
   $cmd = @"
 @echo off
 cd /d "%~dp0"
@@ -451,24 +508,17 @@ sh.Run """" & base & "start.cmd""", 0, False
   Set-Content $StartVbs $vbs -Encoding Ascii
   Ok 'สร้างไฟล์เริ่มโปรแกรมแล้ว'
 
-  # แทนที่ restart: unless-stopped ของ Docker เดิม - ให้เปิดเองทุกครั้งที่ล็อกอิน
+  # ให้โปรแกรมเปิดเองทุกครั้งที่ล็อกอินเข้าเครื่อง
   try {
     $null = schtasks /create /tn $TASK_NAME /tr "wscript.exe `"$StartVbs`"" /sc onlogon /f 2>&1
     if ($LASTEXITCODE -eq 0) { Ok 'ตั้งให้เปิดโปรแกรมเองอัตโนมัติทุกครั้งที่เข้าใช้เครื่อง' }
     else { Warn 'ตั้งให้เปิดอัตโนมัติไม่สำเร็จ - เปิดเองได้ที่เมนู 4' }
   } catch { Warn 'ตั้งให้เปิดอัตโนมัติไม่สำเร็จ - เปิดเองได้ที่เมนู 4' }
 
-  # เปิดพอร์ตให้เครื่องอื่นในหน่วยงานเข้าใช้ได้
-  #
-  # โปรแกรมเปิดรับทุกการ์ดเครือข่ายอยู่แล้ว แต่ Windows Firewall ปิดขาเข้าไว้เป็นค่าเริ่มต้น
-  # ถ้าไม่เปิดกฎนี้ เครื่องอื่นจะเข้าไม่ได้เลยทั้งที่โปรแกรมทำงานปกติ
-  #
-  # จำกัดเฉพาะโปรไฟล์ Private/Domain (เครือข่ายในหน่วยงาน) ไม่เปิดให้ Public
-  # เพราะถ้าเครื่องไปต่อ Wi-Fi สาธารณะจะกลายเป็นเปิดให้คนนอกเข้าถึงข้อมูลผู้ป่วย
+  # เปิดพอร์ตให้เครื่องอื่นในหน่วยงานเข้าใช้ได้ เฉพาะโปรไฟล์ Private/Domain เท่านั้น
   Step "กำลังเปิดพอร์ต $port ใน Windows Firewall (เฉพาะเครือข่ายในหน่วยงาน) ..."
   try {
-    # ลบชื่อเดิมที่เคยใช้ก่อนเปลี่ยนมาใช้ขีดกลางด้วย ไม่งั้นเครื่องที่เคยติดตั้งไว้
-    # จะเหลือกฎเก่าค้างอยู่อีกอันโดยไม่มีใครลบให้
+    # ลบกฎชื่อเดิมด้วย ไม่งั้นเครื่องที่เคยติดตั้งจะเหลือกฎค้างอยู่
     $null = netsh advfirewall firewall delete rule name="NDP Kit" 2>&1
     $null = netsh advfirewall firewall delete rule name="NDP-Kit" 2>&1
     $null = netsh advfirewall firewall add rule name="NDP-Kit" dir=in action=allow `
@@ -582,12 +632,7 @@ function Invoke-Uninstall {
   Pause-Back
 }
 
-# ติดตั้งจากไฟล์ที่ผู้ดูแลถือมาเอง - ทางออกเมื่อ GitHub ใช้ไม่ได้
-#
-# มีไว้เพราะเจอมาแล้วจริงเมื่อ 6 ส.ค. 2569: GitHub Actions ล่ม แพ็กเกจของเวอร์ชัน
-# ใหม่จึงไม่ถูกสร้าง ทั้งปุ่มอัปเดตในโปรแกรมและเมนู 1 เลยหาเวอร์ชันใหม่ไม่เจอทั้งคู่
-# เพราะทั้งสองทางถาม releases/latest ที่เดียวกัน ตอนนั้นไม่มีทางลงเวอร์ชันใหม่เลย
-# นอกจากรอ ทั้งที่ไฟล์พร้อมอยู่ในมือแล้ว
+# ติดตั้งจากไฟล์ที่ถือมาเอง - สำหรับเครื่องที่ออกอินเทอร์เน็ตไม่ได้
 function Invoke-InstallOffline {
   Head 'ติดตั้งจากไฟล์ที่เตรียมมา'
   $file = Find-LocalFile $OFFLINE_ZIP_NAME
@@ -609,7 +654,7 @@ function Invoke-InstallOffline {
 while ($true) {
   Head "$APP_NAME - ตัวช่วยติดตั้ง"
   $ver = Get-InstalledVersion
-  if ($ver) { Write-Host "  ติดตั้งไว้แล้ว : $ver" -ForegroundColor DarkGray }
+  if ($ver) { Write-Host "  ติดตั้งไว้แล้ว : $ver  $(Format-VersionText $ver)" -ForegroundColor DarkGray }
   if ((Get-AppProcesses).Count -gt 0 -and $State.port -gt 0) {
     Write-Host "  กำลังทำงานที่  : http://localhost:$($State.port)" -ForegroundColor DarkGray
   }
@@ -619,7 +664,7 @@ while ($true) {
   Write-Host '  [3] ดูสถานะและ log'
   Write-Host '  [4] เริ่ม / หยุด โปรแกรม'
   Write-Host '  [5] ถอนการติดตั้ง'
-  Write-Host '  [6] ติดตั้งจากไฟล์ที่เตรียมมา (ใช้เมื่อโหลดจาก GitHub ไม่ได้)'
+  Write-Host '  [6] ติดตั้งจากไฟล์ที่เตรียมมา (ใช้เมื่อโหลดจากอินเทอร์เน็ตไม่ได้)'
   Write-Host '  [0] ออก'
   Write-Host ''
   switch (Read-Host '  เลือกหมายเลข แล้วกด Enter') {
