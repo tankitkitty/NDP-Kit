@@ -65,6 +65,8 @@ export default function PrecheckDetailPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [range, setRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
+  /** แท็บที่ผู้ใช้เปิดอยู่ตอนกดเข้ามา ใช้พากลับไปที่เดิม */
+  const [fromTab, setFromTab] = useState("");
 
   // เปิดหน้าต่างยืนยันก่อนรันคำสั่งแก้ไข (มีเฉพาะหัวข้อที่ระบบรันแก้ให้ได้)
   const [fixOpen, setFixOpen] = useState(false);
@@ -99,13 +101,17 @@ export default function PrecheckDetailPage({
     [id]
   );
 
-  // ช่วงวันที่ส่งต่อมาจากหน้ารวมทาง query string เพื่อให้ผลที่เห็นตรงกับที่หน้ารวมตรวจไว้
+  // ช่วงวันที่และแท็บส่งต่อมาจากหน้ารวมทาง query string
+  // ช่วงวันที่ทำให้ผลที่เห็นตรงกับที่หน้ารวมตรวจไว้ ส่วนแท็บใช้ตอนกดกลับ
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const from = q.get("from") || "";
     const to = q.get("to") || "";
     const valid = DATE_PATTERN.test(from) && DATE_PATTERN.test(to);
     setRange({ from: valid ? from : "", to: valid ? to : "" });
+    // รับเฉพาะรูปแบบที่เป็นชื่อแท็บได้จริง ไม่เอาค่าจาก URL ไปต่อท้ายลิงก์ตรงๆ
+    const tab = q.get("tab") || "";
+    setFromTab(/^[a-z0-9-]{1,32}$/i.test(tab) ? tab : "");
     void run(valid ? from : "", valid ? to : "");
   }, [run]);
 
@@ -132,11 +138,18 @@ export default function PrecheckDetailPage({
     }
   }
 
-  // กลับไปหน้ารวมโดยพาช่วงวันที่กลับไปด้วย ไม่งั้นผู้ใช้ต้องเลือกวันที่ใหม่ทุกครั้ง
-  const backHref =
-    range.from && range.to
-      ? `/ndp-precheck?from=${range.from}&to=${range.to}`
-      : "/ndp-precheck";
+  // กลับไปหน้ารวมโดยพาช่วงวันที่และแท็บเดิมกลับไปด้วย
+  // ไม่งั้นผู้ใช้ต้องเลือกวันที่ใหม่ และเด้งกลับไปแท็บแรกทุกครั้งที่กดกลับ
+  const backHref = (() => {
+    const params = new URLSearchParams();
+    if (range.from && range.to) {
+      params.set("from", range.from);
+      params.set("to", range.to);
+    }
+    if (fromTab) params.set("tab", fromTab);
+    const qs = params.toString();
+    return qs ? `/ndp-precheck?${qs}` : "/ndp-precheck";
+  })();
 
   const statusText = !outcome
     ? ""

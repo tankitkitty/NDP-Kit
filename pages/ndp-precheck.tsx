@@ -351,11 +351,12 @@ export default function NdpPrecheck({ loginname, hospitalName }: { loginname: st
             {/* รายละเอียดไปอยู่หน้าของตัวเอง ไม่กางต่อท้ายการ์ดแล้ว เพราะตารางบางหัวข้อ
                 มีเป็นร้อยแถวพร้อมคำแนะนำยาวๆ พอกางแล้วต้องเลื่อนผ่านทั้งหมดกว่าจะถึง
                 การ์ดใบถัดไป และกางหลายใบพร้อมกันแล้วหาไม่เจอว่าอ่านถึงไหน
-                พาช่วงวันที่ไปด้วยเพื่อให้หน้ารายละเอียดตรวจด้วยเงื่อนไขเดียวกัน */}
+                พาช่วงวันที่ไปด้วยเพื่อให้หน้ารายละเอียดตรวจด้วยเงื่อนไขเดียวกัน
+                และพาแท็บที่เปิดอยู่ไปด้วย เพื่อให้กดกลับมาแล้วอยู่แท็บเดิม */}
             {outcome && (outcome.sections.length > 0 || outcome.advice || outcome.error) ? (
               <Link
                 className="button-ghost precheck-small-btn"
-                href={`/ndp-precheck/${encodeURIComponent(meta.id)}?from=${from}&to=${to}`}
+                href={`/ndp-precheck/${encodeURIComponent(meta.id)}?from=${from}&to=${to}&tab=${activeTab}`}
               >
                 ดูรายละเอียด →
               </Link>

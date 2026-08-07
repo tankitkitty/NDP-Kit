@@ -30,7 +30,7 @@ const ACTIVE_DAYS = 365;
 const check: CheckDefinition = {
   id: ID,
   title: "ยาที่ยังไม่ได้กำหนดรหัส TMT (สกส.)",
-  description: "drugitems.sks_drug_code ต้องมีค่า ไม่งั้นส่งออกไป NDP ไม่ได้",
+  description: "เฉพาะยาที่เปิดใช้งานอยู่ — drugitems.sks_drug_code ต้องมีค่า ไม่งั้นส่งออกไป NDP ไม่ได้",
   async run(): Promise<CheckOutcome> {
     try {
       const cols = await tableColumns("drugitems");
@@ -45,6 +45,15 @@ const check: CheckDefinition = {
         );
       }
 
+      // ดูเฉพาะยาที่ยังเปิดใช้งานอยู่ในทะเบียน (istatus = 'Y')
+      //
+      // ทะเบียนยาของหน่วยบริการมักมียาเก่าที่ปิดการใช้งานไปแล้วค้างอยู่จำนวนมาก
+      // ในฐานทดสอบมี 116 รายการที่ไม่มีรหัส TMT แต่ 74 รายการเป็นยาที่ปิดไปแล้ว
+      // ซึ่งไม่ต้องตั้งรหัสอีก การแสดงรวมกันทำให้หาตัวที่ต้องแก้จริงไม่เจอ
+      //
+      // ฐานที่ไม่มีคอลัมน์นี้ให้ดูทุกรายการเหมือนเดิม ดีกว่าตรวจไม่ได้เลย
+      const activeOnly = cols.has("istatus") ? "AND d.istatus = 'Y'" : "";
+
       const raw: any = await selectOnly(
         `SELECT d.icode,
                 TRIM(CONCAT(COALESCE(d.name, ''), ' ', COALESCE(d.strength, ''), ' ', COALESCE(d.units, ''))) AS drugname,
@@ -52,7 +61,8 @@ const check: CheckDefinition = {
                   WHERE i.icode = d.icode
                     AND i.vstdate >= DATE_SUB(CURDATE(), INTERVAL ${ACTIVE_DAYS} DAY)) AS uses
            FROM drugitems d
-          WHERE d.sks_drug_code IS NULL OR TRIM(d.sks_drug_code) = ''
+          WHERE (d.sks_drug_code IS NULL OR TRIM(d.sks_drug_code) = '')
+                ${activeOnly}
           ORDER BY d.icode
           LIMIT ${LIMIT}`
       );
@@ -79,10 +89,10 @@ const check: CheckDefinition = {
         problemCount: active,
         summary:
           total === 0
-            ? "ยาทุกรายการกำหนดรหัส TMT (สกส.) ครบแล้ว"
+            ? "ยาที่เปิดใช้งานอยู่กำหนดรหัส TMT (สกส.) ครบทุกรายการแล้ว"
             : active > 0
               ? `พบ ${total} รายการที่ยังไม่ได้กำหนดรหัส TMT — ในจำนวนนี้ ${active} รายการยังจ่ายจริงอยู่ ต้องรีบตั้งรหัส`
-              : `พบ ${total} รายการที่ยังไม่ได้กำหนดรหัส TMT แต่ไม่มีรายการใดถูกจ่ายในรอบ 1 ปี (น่าจะเป็นยาที่เลิกใช้แล้ว)`,
+              : `พบ ${total} รายการที่ยังไม่ได้กำหนดรหัส TMT แต่ไม่มีรายการใดถูกจ่ายในรอบ 1 ปี`,
         sections:
           total === 0
             ? []
@@ -106,8 +116,11 @@ const check: CheckDefinition = {
           "ยาที่ไม่มีรหัสนี้จะส่งเบิกไม่ได้เลย ทั้งที่จ่ายยาให้ผู้ป่วยไปจริงแล้ว\n\n" +
           "• ตั้งที่ HOSxP เมนูตั้งค่า > ห้องยา > ทะเบียนยา เลือกยาที่ต้องการ แล้วใส่รหัส TMT ในช่องรหัสยามาตรฐาน\n" +
           "• ตั้งครั้งเดียวใช้ได้ตลอด ไม่ต้องตั้งใหม่ทุกรอบส่งเคลม\n" +
-          "• ยาที่เลิกใช้แล้ว (แถวสีเหลือง) ไม่จำเป็นต้องตั้งรหัสย้อนหลัง แต่ถ้าจะกลับมาใช้อีกต้องตั้งก่อน\n\n" +
-          "หมายเหตุ: ตรวจทั้งช่องที่เป็นค่าว่างและที่ยังไม่เคยกรอก เพราะในฐานจริงพบทั้งสองแบบปนกัน",
+          "• ยาที่ไม่ได้จ่ายเลยในรอบปี (แถวสีเหลือง) ยังไม่ต้องรีบ แต่ถ้าจะกลับมาใช้ต้องตั้งก่อน\n\n" +
+          "หมายเหตุ: รายงานนี้ดูเฉพาะยาที่เปิดใช้งานอยู่ในทะเบียน (istatus = Y) " +
+          "ยาที่ปิดการใช้งานไปแล้วไม่ต้องตั้งรหัส จึงไม่นำมาแสดง — " +
+          "ถ้ามียาที่ยังจ่ายจริงแต่ไม่ขึ้นในรายงานนี้ ให้ตรวจว่าสถานะในทะเบียนยาถูกปิดไว้หรือไม่\n" +
+          "และตรวจทั้งช่องที่เป็นค่าว่างและที่ยังไม่เคยกรอก เพราะในฐานจริงพบทั้งสองแบบปนกัน",
       };
     } catch (error) {
       return unavailableOutcome(ID, "ตรวจสอบว่าฐานนี้มีตาราง drugitems และ opitemrece หรือไม่", error);
