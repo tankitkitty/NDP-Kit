@@ -96,8 +96,29 @@ function decodeHtml(s: string): string {
  * ไฟล์ที่อ่านเลขเวอร์ชันจากชื่อไม่ได้จะถูกข้ามไปเงียบๆ ตั้งใจให้เป็นแบบนั้น
  * เพราะโฟลเดอร์อาจมีไฟล์อื่นปนอยู่ (เอกสาร คู่มือ) ไม่ควรทำให้ทั้งรายการพัง
  */
+/**
+ * รายชื่อไฟล์ทั้งหมดในโฟลเดอร์ ยังไม่กรองอะไร
+ *
+ * รับ id โฟลเดอร์ได้ เพราะนอกจากโฟลเดอร์แพ็กเกจโปรแกรมแล้ว ยังใช้อ่านโฟลเดอร์
+ * ย่อยที่เก็บคำขอสร้างรายงานจากผู้ช่วยด้วย (ดู lib/reports/inbox.ts)
+ */
+export async function listFolderFiles(folderId: string = FOLDER_ID): Promise<RawFile[]> {
+  return API_KEY ? await listViaApi(folderId) : await listViaFolderPage(folderId);
+}
+
+/** ที่อยู่ดาวน์โหลดของไฟล์ใดก็ได้ในโฟลเดอร์ ผูกกับรหัสไฟล์จึงไม่ชนแคชของเก่า */
+export function downloadUrlForFileId(fileId: string): string {
+  if (API_KEY) {
+    return (
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}` +
+      `?alt=media&key=${encodeURIComponent(API_KEY)}`
+    );
+  }
+  return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`;
+}
+
 export async function listVersions(): Promise<DriveVersion[]> {
-  const files = API_KEY ? await listViaApi() : await listViaFolderPage();
+  const files = await listFolderFiles();
 
   const seen = new Set<string>();
   const out: DriveVersion[] = [];
@@ -116,15 +137,15 @@ export async function listVersions(): Promise<DriveVersion[]> {
   return out;
 }
 
-interface RawFile {
+export interface RawFile {
   id: string;
   name: string;
   size: number;
 }
 
 /** ทางการ ใช้เมื่อตั้ง DRIVE_API_KEY ไว้ */
-async function listViaApi(): Promise<RawFile[]> {
-  const q = `'${FOLDER_ID}' in parents and trashed = false`;
+async function listViaApi(folderId: string): Promise<RawFile[]> {
+  const q = `'${folderId}' in parents and trashed = false`;
   const url =
     "https://www.googleapis.com/drive/v3/files" +
     `?q=${encodeURIComponent(q)}` +
@@ -157,8 +178,8 @@ async function listViaApi(): Promise<RawFile[]> {
  * และรายการไฟล์อยู่ใน HTML ตรงๆ ไม่ได้ซ่อนอยู่ในก้อน JavaScript จึงอ่านได้
  * โดยไม่ต้องรันสคริปต์ แต่ย้ำว่านี่ไม่ใช่ API ที่ Google รับรอง
  */
-async function listViaFolderPage(): Promise<RawFile[]> {
-  const url = `https://drive.google.com/embeddedfolderview?id=${encodeURIComponent(FOLDER_ID)}#list`;
+async function listViaFolderPage(folderId: string): Promise<RawFile[]> {
+  const url = `https://drive.google.com/embeddedfolderview?id=${encodeURIComponent(folderId)}#list`;
   const res = await fetch(url, {
     headers: {
       // ไม่ใส่ User-Agent แบบเบราว์เซอร์ Google จะตอบหน้าเปล่ากลับมา
@@ -196,13 +217,7 @@ async function listViaFolderPage(): Promise<RawFile[]> {
  * แบบที่เคยเจอกับ URL กลางของ GitHub เมื่อ 5 ส.ค. 2569
  */
 export function downloadUrl(v: DriveVersion): string {
-  if (API_KEY) {
-    return (
-      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(v.fileId)}` +
-      `?alt=media&key=${encodeURIComponent(API_KEY)}`
-    );
-  }
-  return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(v.fileId)}`;
+  return downloadUrlForFileId(v.fileId);
 }
 
 /** ไว้ให้หน้าตั้งค่าบอกผู้ดูแลว่าตอนนี้ระบบอ่านรายการด้วยวิธีไหน */

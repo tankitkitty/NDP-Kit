@@ -1,9 +1,11 @@
 import { GetServerSideProps } from "next";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import Layout from "../components/Layout";
 import { getHospitalName } from "../lib/db";
 import { getSession } from "../lib/session";
+import { isAdminMode } from "../lib/reports/admin";
 import { ReportDefinition, ReportParam, ReportParamType } from "../lib/reports/types";
 
 /**
@@ -17,6 +19,11 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   const session = getSession(context.req);
   if (!session) {
     return { redirect: { destination: "/login", permanent: false } };
+  }
+  // เมนูรายงานเห็นเฉพาะโหมดผู้ดูแล — กันที่หน้าด้วย ไม่ใช่ซ่อนแค่ในแถบเมนู
+  // ไม่งั้นพิมพ์ URL ตรงๆ ก็เข้าได้อยู่ดี
+  if (!isAdminMode(context.req)) {
+    return { redirect: { destination: "/", permanent: false } };
   }
   const hospitalName = await getHospitalName();
   return { props: { loginname: session.loginname, hospitalName } };
@@ -56,6 +63,11 @@ const UNGROUPED = "ไม่ระบุหมวด";
  * ไม่เรียงรายงานภายในหมวดใหม่ ปล่อยตามลำดับในไฟล์ (ลำดับที่สร้าง) เพื่อให้เลขข้อ
  * ของแต่ละใบไม่กระโดดไปมาทุกครั้งที่มีคนแก้ชื่อรายงาน
  */
+/** รายงานที่มากับโปรแกรมแยกได้จาก id ไม่ต้องส่งฟิลด์เพิ่มมาจากเซิร์ฟเวอร์ */
+function isBuiltin(report: ReportDefinition): boolean {
+  return report.id.startsWith("builtin:");
+}
+
 function groupReports(reports: ReportDefinition[]): { name: string; items: ReportDefinition[] }[] {
   const buckets = new Map<string, ReportDefinition[]>();
   for (const report of reports) {
@@ -79,9 +91,10 @@ const SAMPLE: Draft = {
   name: "ผู้มารับบริการรายวัน",
   description: "จำนวนผู้มารับบริการแยกตามวัน ในช่วงวันที่ที่เลือก",
   group: "งานบริการทั่วไป",
-  sql: `SELECT DATE_FORMAT(o.vstdate, '%Y-%m-%d') AS วันที่,
-       COUNT(*) AS จำนวนครั้ง,
-       COUNT(DISTINCT o.hn) AS จำนวนคน
+  // ชื่อคอลัมน์ภาษาไทยต้องอยู่ใน backtick เสมอ ไม่งั้น MariaDB ฟ้อง syntax error
+  sql: `SELECT DATE_FORMAT(o.vstdate, '%Y-%m-%d') AS \`วันที่\`,
+       COUNT(*) AS \`จำนวนครั้ง\`,
+       COUNT(DISTINCT o.hn) AS \`จำนวนคน\`
   FROM ovst o
  WHERE o.vstdate BETWEEN :from AND :to
  GROUP BY o.vstdate
@@ -109,6 +122,10 @@ export default function ReportsPage({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  /** เครื่องนี้เปิดโหมดผู้ดูแลหรือไม่ — คุมว่าจะมีปุ่มเพิ่ม/แก้/ลบให้เห็นไหม */
+  const [admin, setAdmin] = useState(false);
+  /** id ของรายงานที่กำลังส่งเข้าส่วนกลาง ใช้ปิดปุ่มระหว่างรอ */
+  const [sendingId, setSendingId] = useState("");
   /** หมวดที่ผู้ใช้พับเก็บไว้ — เก็บเป็น "พับ" ไม่ใช่ "เปิด" เพื่อให้หมวดใหม่เปิดมาเห็นเลย */
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const fileInput = useRef<HTMLInputElement>(null);
@@ -136,6 +153,7 @@ export default function ReportsPage({
       const res = await fetch("/api/reports");
       const data = await res.json();
       setReports(Array.isArray(data.reports) ? data.reports : []);
+      setAdmin(!!data.admin);
     } catch {
       setError("โหลดรายการรายงานไม่สำเร็จ");
     } finally {
@@ -190,6 +208,47 @@ export default function ReportsPage({
       await refresh();
     } catch {
       setError("เรียก API ไม่สำเร็จ");
+    }
+  }
+
+  /**
+   * ส่งรายงานใบนี้ไปให้ส่วนกลางพิจารณา
+   *
+   * ถ้าชื่อซ้ำกับรายงานที่มีอยู่ในระบบแล้ว ฝั่ง API จะตอบ 409 กลับมา
+   * ตรงนี้จึงถามผู้ใช้ว่าจะส่งเป็น "คำขอแก้ไข" แทนไหม แทนที่จะปล่อยให้ส่งซ้ำ
+   * จนส่วนกลางได้ใบเดียวกันสองใบแล้วต้องมานั่งเดาว่าอันไหนใหม่กว่า
+   */
+  async function sendToCentral(report: ReportDefinition, kind: "new" | "revision" = "new") {
+    setMessage("");
+    setError("");
+    setSendingId(report.id);
+    try {
+      const res = await fetch("/api/reports/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: report.id, kind }),
+      });
+      const data = await res.json();
+
+      if (res.status === 409) {
+        if (window.confirm(`${data.error}\n\nจะส่งเป็นคำขอแก้ไขรายงานเดิมไหม`)) {
+          await sendToCentral(report, "revision");
+        }
+        return;
+      }
+      if (!res.ok) {
+        setError(data.error || "ส่งคำขอไม่สำเร็จ");
+        return;
+      }
+      setMessage(
+        kind === "revision"
+          ? `ส่งคำขอแก้ไข "${report.name}" ไปยังส่วนกลางแล้ว`
+          : `ส่ง "${report.name}" ไปยังส่วนกลางแล้ว รอผู้ดูแลนำไปสร้างเป็นรายงาน`
+      );
+    } catch {
+      setError("เรียก API ไม่สำเร็จ");
+    } finally {
+      setSendingId("");
     }
   }
 
@@ -286,26 +345,37 @@ export default function ReportsPage({
           วางไว้มุมขวาบนจึงไม่ไปแย่งที่ของรายการรายงานซึ่งเป็นเนื้อหาหลัก */}
       <div className="reports-header">
         <div style={{ minWidth: 0 }}>
-          <h1 className="page-title" style={{ marginBottom: 6 }}>รายงานที่เขียนเอง</h1>
+          <h1 className="page-title" style={{ marginBottom: 6 }}>รายงาน</h1>
           <p className="brand-subtitle" style={{ margin: 0, maxWidth: 820, lineHeight: 1.6 }}>
-            เขียนคำสั่ง SELECT เพื่อดึงข้อมูลจากฐาน HOSxP มาแสดงเป็นตาราง ส่งออก Excel ได้
-            และส่งไฟล์รายงานให้หน่วยงานอื่นนำไปใช้ต่อได้
+            {admin
+              ? "เครื่องนี้อยู่ในโหมดผู้ดูแล ทดลองเขียนคำสั่ง SELECT ได้ " +
+                "เขียนเสร็จแล้วส่งให้ผู้พัฒนาเพิ่มเข้าไปในโปรแกรม เพื่อให้ทุกหน่วยได้ใช้เหมือนกัน"
+              : "รายงานที่มากับโปรแกรม กดที่ชื่อรายงานเพื่อดูข้อมูล และส่งออกเป็น Excel ได้ " +
+                "ถ้าต้องการรายงานเพิ่มให้แจ้งผู้ดูแล"}
           </p>
         </div>
 
         <div className="toolbar" style={{ justifyContent: "flex-end" }}>
-          <button className="button-primary" onClick={() => { setDraft({ ...EMPTY_DRAFT }); setResult(null); }}>
-            + สร้างรายงานใหม่
-          </button>
-          <button className="button-ghost" onClick={() => { setDraft({ ...SAMPLE }); setResult(null); }}>
-            เริ่มจากตัวอย่าง
-          </button>
-          <button className="button-ghost" onClick={() => fileInput.current?.click()}>
-            นำเข้าไฟล์รายงาน
-          </button>
-          <button className="button-ghost" onClick={() => exportBundle()} disabled={reports.length === 0}>
-            ส่งออกทั้งหมด
-          </button>
+          {/* ปุ่มที่เปลี่ยนแปลงรายงานมีเฉพาะเครื่องผู้ดูแล ฝั่ง API กันไว้อีกชั้นแล้ว */}
+          {admin ? (
+            <>
+              <Link href="/reports/inbox" className="button-ghost">
+                คำขอจากผู้ช่วย
+              </Link>
+              <button className="button-primary" onClick={() => { setDraft({ ...EMPTY_DRAFT }); setResult(null); }}>
+                + สร้างรายงานใหม่
+              </button>
+              <button className="button-ghost" onClick={() => { setDraft({ ...SAMPLE }); setResult(null); }}>
+                เริ่มจากตัวอย่าง
+              </button>
+              <button className="button-ghost" onClick={() => fileInput.current?.click()}>
+                นำเข้าไฟล์รายงาน
+              </button>
+              <button className="button-ghost" onClick={() => exportBundle()} disabled={reports.length === 0}>
+                ส่งออกทั้งหมด
+              </button>
+            </>
+          ) : null}
           <input
             ref={fileInput}
             type="file"
@@ -404,7 +474,9 @@ export default function ReportsPage({
 
                     <div className="report-row-text">
                       <span className="report-row-name">{report.name}</span>
-                      {report.source === "imported" ? (
+                      {isBuiltin(report) ? (
+                        <span className="status-pill status-pending">มากับโปรแกรม</span>
+                      ) : report.source === "imported" ? (
                         <span className="status-pill status-warn">รับมาจากหน่วยอื่น</span>
                       ) : null}
                       {report.description ? (
@@ -412,10 +484,27 @@ export default function ReportsPage({
                       ) : null}
                     </div>
 
+                    {/* รายงานที่มากับโปรแกรมแก้/ลบไม่ได้ ต้องแก้ที่โค้ดแล้วปล่อยเวอร์ชันใหม่
+                        ไม่งั้นแต่ละหน่วยจะแก้ query กันคนละแบบจนไม่เหลือชุดมาตรฐาน */}
                     <div className="report-row-actions" onClick={(e) => e.stopPropagation()}>
-                      <button className="button-ghost" onClick={() => editReport(report)}>แก้ไข</button>
-                      <button className="button-ghost" onClick={() => exportBundle([report.id])}>ส่งออก</button>
-                      <button className="button-ghost" onClick={() => void removeReport(report)}>ลบ</button>
+                      {admin && !isBuiltin(report) ? (
+                        <button className="button-ghost" onClick={() => editReport(report)}>แก้ไข</button>
+                      ) : null}
+                      {admin && !isBuiltin(report) ? (
+                        <button
+                          className="button-ghost"
+                          onClick={() => void sendToCentral(report)}
+                          disabled={sendingId === report.id}
+                        >
+                          {sendingId === report.id ? "กำลังส่ง..." : "ส่งเข้าส่วนกลาง"}
+                        </button>
+                      ) : null}
+                      {admin ? (
+                        <button className="button-ghost" onClick={() => exportBundle([report.id])}>ส่งออก</button>
+                      ) : null}
+                      {admin && !isBuiltin(report) ? (
+                        <button className="button-ghost" onClick={() => void removeReport(report)}>ลบ</button>
+                      ) : null}
                     </div>
                   </div>
                 ))}

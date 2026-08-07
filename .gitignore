@@ -14,6 +14,7 @@ yarn-error.log*
 # เพื่อให้ครอบ data/ ที่ตัวช่วยติดตั้งสร้างไว้ในโฟลเดอร์ย่อยด้วย (เช่น install/data/)
 dbconfig.json
 dbconfig43.json
+report-inbox.json
 .session-secret
 .setup-token
 .setup-done

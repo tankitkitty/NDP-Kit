@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { getSession } from "../../../lib/session";
 import { UnsafeSqlError } from "../../../lib/reports/guard";
 import { runReportSql } from "../../../lib/reports/run";
-import { getReport } from "../../../lib/reports/store";
+import { findReport } from "../../../lib/reports/registry";
 
 /**
  * รันรายงาน: POST { id, values }  หรือ  POST { sql, params, values } (ทดลองรันตอนเขียน)
@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   let label: string;
 
   if (typeof body.id === "string" && body.id) {
-    const report = getReport(body.id);
+    const report = findReport(body.id);
     if (!report) return res.status(404).json({ error: "ไม่พบรายงานนี้" });
     sql = report.sql;
     params = report.params || [];

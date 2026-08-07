@@ -3,8 +3,9 @@ import Link from "next/link";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import { getHospitalName } from "../../lib/db";
-import { getReport } from "../../lib/reports/store";
+import { findReport } from "../../lib/reports/registry";
 import { getSession } from "../../lib/session";
+import { isAdminMode } from "../../lib/reports/admin";
 import { ReportDefinition, ReportParam } from "../../lib/reports/types";
 
 interface RunResult {
@@ -29,9 +30,13 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   if (!session) {
     return { redirect: { destination: "/login", permanent: false } };
   }
+  // ต้องกันเหมือนหน้ารวม ไม่งั้นเดา URL ของรายงานตรงๆ ก็เปิดได้
+  if (!isAdminMode(context.req)) {
+    return { redirect: { destination: "/", permanent: false } };
+  }
 
   const id = typeof context.params?.id === "string" ? context.params.id : "";
-  const report = getReport(id);
+  const report = findReport(id);
   if (!report) {
     // รายงานถูกลบไปแล้วหรือลิงก์ผิด — ส่งกลับหน้ารวมดีกว่าโชว์หน้าว่าง
     return { redirect: { destination: "/reports", permanent: false } };
@@ -128,7 +133,12 @@ export default function ReportRunPage({
       </p>
 
       <div className="add-item-card">
-        {report.source === "imported" ? (
+        {report.id.startsWith("builtin:") ? (
+          <div className="state-note" style={{ marginBottom: 14 }}>
+            รายงานนี้มากับตัวโปรแกรม ทุกหน่วยบริการได้ชุดเดียวกัน แก้ที่เครื่องนี้ไม่ได้
+            ถ้าผลลัพธ์ไม่ตรงกับที่ต้องการให้แจ้งผู้ดูแลเพื่อแก้ในเวอร์ชันถัดไป
+          </div>
+        ) : report.source === "imported" ? (
           <div className="state-warn" style={{ marginBottom: 14 }}>
             รายงานนี้รับมาจากหน่วยงานอื่น — ควรอ่านคำสั่งด้านล่างให้เข้าใจก่อนรัน
             ระบบกันคำสั่งที่แก้ไขหรือทำลายข้อมูลให้แล้ว แต่คำสั่งที่ปลอดภัยก็ยังดึงข้อมูลผู้ป่วยออกมาได้

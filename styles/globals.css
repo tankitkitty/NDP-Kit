@@ -922,10 +922,19 @@ details[open] > .report-group-head::before {
    แยกคลาสไว้ต่างหากเพราะ .row-* ผูกกับ .data-table tbody tr เท่านั้น */
 .state-ok,
 .state-alert,
-.state-warn {
+.state-warn,
+.state-note {
   border: 1px solid transparent;
   border-radius: 6px;
   padding: 6px 10px;
+}
+
+/* เทา = บอกให้ทราบเฉยๆ ไม่ใช่สถานะถูก/ผิด/ต้องตรวจ จึงไม่ใช้สามสีที่สงวนไว้
+   ใช้กับข้อความอย่าง "รายงานนี้มาจากส่วนกลาง แก้ที่เครื่องนี้ไม่ได้" */
+.state-note {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+  color: #4b5563;
 }
 
 .state-ok {
@@ -1681,4 +1690,242 @@ details[open] > .report-group-head::before {
 
 .brand-fallback-name.on-dark {
   color: #fff;
+}
+
+/* ---------- Dashboard สรุปภาพรวมบนหน้าแรก ---------- */
+
+/* เส้นคั่นบางๆ แยกจากปุ่มทางลัดด้านบน ไม่ใช้กรอบเต็มเพราะอยู่ใน .page-card อยู่แล้ว */
+.dash {
+  margin-top: 30px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+/* ตัวเลขสำคัญสามช่อง ยุบเป็นคอลัมน์เดียวบนจอแคบ */
+.dash-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.dash-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-strong);
+}
+
+.dash-tile-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.dash-tile-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  line-height: 1.2;
+  /* ตัวเลขความกว้างเท่ากันทุกตัว อ่านเทียบกันง่ายและไม่ขยับตอนค่าเปลี่ยน */
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-tile-sub {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.dash-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.dash-panel {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.dash-panel-title {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* กราฟแท่งแนวตั้ง ทำด้วย CSS ล้วน ไม่ต้องพึ่งไลบรารีกราฟ
+   ซึ่งจะทำให้แพ็กเกจใหญ่ขึ้นหลายร้อยกิโลไบต์เพื่อกราฟเดียว */
+.dash-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 150px;
+}
+
+.dash-bar-col {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+}
+
+.dash-bar-num {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-bar-track {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  flex: 1;
+}
+
+.dash-bar-fill {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+  background: var(--button);
+}
+
+.dash-bar-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* แถวรายการพร้อมแถบสัดส่วน ใช้ทั้งฝั่งสิทธิและฝั่งหมวดค่าบริการ */
+.dash-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 70px auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+}
+
+.dash-list-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-list-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.dash-list-fill {
+  display: block;
+  height: 100%;
+  background: var(--button);
+}
+
+.dash-list-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.dash-empty {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.dash-note {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+/* เหลือง = ควรรีบตรวจ ตามกติกาสีเดียวกับแถวตารางและ .state-warn
+   ใช้กับช่องเงินที่จ่ายออกไปแล้วแต่เบิกคืนไม่ได้ */
+.dash-tile-warn {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.dash-link {
+  color: var(--highlight);
+  text-decoration: underline;
+}
+
+/* รายการวินิจฉัย — เลขลำดับ + รหัส + ชื่อโรค + จำนวน */
+.dash-dx {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dash-dx-row {
+  display: grid;
+  grid-template-columns: 18px 56px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.86rem;
+}
+
+.dash-dx-no {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.dash-dx-code {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.dash-dx-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+/* ชื่อผู้ใช้มุมล่างซ้ายกดได้ เพื่อเข้าโหมดผู้ดูแล
+   ตั้งใจให้หน้าตาเหมือนป้ายชื่อเดิมทุกอย่าง ไม่มีอะไรชวนให้กด
+   เพราะเจ้าหน้าที่ทั่วไปไม่ต้องใช้ และไม่ควรมีปุ่มลึกลับให้สงสัย */
+.user-pill-btn {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.user-pill-admin {
+  border-color: rgba(251, 191, 36, 0.5);
+}
+
+/* ป้ายบอกว่ากำลังอยู่ในโหมดผู้ดูแล ไม่งั้นเปิดค้างไว้แล้วลืมว่าเปิดอยู่ */
+.user-pill-tag {
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: rgba(251, 191, 36, 0.16);
+  color: #fbbf24;
+  font-size: 0.72rem;
+  font-weight: 600;
 }

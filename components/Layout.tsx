@@ -29,6 +29,8 @@ interface NavItem {
   label: string;
   // React 19 เลิกประกาศ JSX เป็น global namespace แล้ว ต้อง import type มาใช้เอง
   Icon: (props: IconProps) => JSX.Element;
+  /** เห็นเฉพาะตอนอยู่ในโหมดผู้ดูแล — ตัวหน้าก็กันซ้ำฝั่งเซิร์ฟเวอร์อีกชั้น */
+  adminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -41,7 +43,8 @@ const NAV_ITEMS: NavItem[] = [
   // ถ้าจะเปิดใช้อีกครั้ง เอาบรรทัดล่างนี้กลับมา (EligibilityIcon มีอยู่แล้วใน NavIcons)
   // { href: "/eligibility-check", label: "ตรวจสอบสิทธิ", Icon: EligibilityIcon },
   { href: "/ndp-precheck", label: "ตรวจก่อนส่งเคลม NDP", Icon: PrecheckIcon },
-  { href: "/reports", label: "รายงานที่เขียนเอง", Icon: ReportIcon },
+  // เมนูรายงานเห็นเฉพาะโหมดผู้ดูแล (ดู adminOnly ด้านล่าง)
+  { href: "/reports", label: "รายงาน", Icon: ReportIcon, adminOnly: true },
   // ปิดเมนู Checklist ตั้งค่าไว้ก่อน ตัวหน้ายังอยู่ครบ เข้าถึงได้ทาง URL ตรงๆ
   // ถ้าจะเปิดใช้อีกครั้ง เอาบรรทัดล่างนี้กลับมา (ChecklistIcon มีอยู่แล้วใน NavIcons)
   // และเอาปุ่มบนหน้าแรกใน pages/index.tsx กลับมาด้วย
@@ -61,10 +64,31 @@ interface LayoutProps {
 export default function Layout({ title, loginname, hospitalName, fullWidth, children }: LayoutProps) {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
+  /** เครื่องนี้อยู่ในโหมดผู้ดูแลหรือไม่ — ใช้เปลี่ยนหน้าตาปุ่มชื่อผู้ใช้เท่านั้น
+      ตัวคุมสิทธิ์จริงอยู่ฝั่งเซิร์ฟเวอร์ (ดู lib/reports/admin.ts) */
+  const [adminMode, setAdminMode] = useState(false);
 
   useEffect(() => {
     setMobileOpen(false);
   }, [router.pathname]);
+
+  useEffect(() => {
+    if (!loginname) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/reports/unlock", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setAdminMode(!!data.admin);
+      } catch {
+        // ถามไม่ได้ก็ถือว่าไม่ได้อยู่ในโหมดผู้ดูแล
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loginname]);
 
   /**
    * หมดเวลาใช้งาน 8 ชั่วโมงแล้วให้พากลับไปหน้าเข้าสู่ระบบเอง
@@ -101,6 +125,41 @@ export default function Layout({ title, loginname, hospitalName, fullWidth, chil
     router.push("/login");
   }
 
+  /**
+   * เปิด/ปิดโหมดผู้ดูแลด้วยการกดที่ชื่อตัวเอง
+   *
+   * ตรวจรหัสที่ฝั่งเซิร์ฟเวอร์แล้วออกคุกกี้ ไม่ได้เก็บสถานะไว้ในเบราว์เซอร์เอง
+   * เพราะหน้าที่ของโหมดนี้คือคุมว่า API ยอมให้ทำอะไรได้บ้าง ไม่ใช่แค่ซ่อนปุ่ม
+   *
+   * โหลดหน้าใหม่หลังเปลี่ยนสถานะ เพราะเมนูและปุ่มหลายที่ตัดสินจากค่าที่ส่งมาตอน
+   * เปิดหน้า การรีเฟรชจึงตรงไปตรงมากว่าไล่บอกทุกหน้าให้ดึงสถานะใหม่เอง
+   */
+  async function toggleAdmin() {
+    if (adminMode) {
+      if (!window.confirm("ออกจากโหมดผู้ดูแลใช่ไหม")) return;
+      await fetch("/api/reports/unlock", { method: "DELETE" });
+      router.reload();
+      return;
+    }
+
+    const password = window.prompt("รหัสผู้ดูแล");
+    if (!password) return;
+    try {
+      const res = await fetch("/api/reports/unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) {
+        window.alert("รหัสไม่ถูกต้อง");
+        return;
+      }
+      router.reload();
+    } catch {
+      window.alert("เรียก API ไม่สำเร็จ");
+    }
+  }
+
   function isActive(href: string): boolean {
     if (href === "/") return router.pathname === "/";
     return router.pathname.startsWith(href);
@@ -121,7 +180,7 @@ export default function Layout({ title, loginname, hospitalName, fullWidth, chil
         </div>
         {loginname ? (
           <nav className="sidebar-nav">
-            {NAV_ITEMS.map(({ href, label, Icon }) => (
+            {NAV_ITEMS.filter((item) => !item.adminOnly || adminMode).map(({ href, label, Icon }) => (
               <Link key={href} href={href} className={isActive(href) ? "active" : ""}>
                 <Icon />
                 <span>{label}</span>
@@ -134,10 +193,18 @@ export default function Layout({ title, loginname, hospitalName, fullWidth, chil
           {hospitalName ? <span className="user-pill">{hospitalName}</span> : null}
           {loginname ? (
             <>
-              <span className="user-pill">
+              {/* กดที่ชื่อตัวเองเพื่อเปิดเมนูของผู้ดูแล — ไม่มีอะไรบอกไว้บนหน้าจอ
+                  เพราะเจ้าหน้าที่ทั่วไปไม่ต้องใช้ และไม่ควรมีปุ่มชวนให้กดเล่น */}
+              <button
+                type="button"
+                className={`user-pill user-pill-btn${adminMode ? " user-pill-admin" : ""}`}
+                onClick={toggleAdmin}
+                title={adminMode ? "กำลังอยู่ในโหมดผู้ดูแล" : undefined}
+              >
                 <span className="user-avatar">{loginname.charAt(0).toUpperCase()}</span>
                 {loginname}
-              </span>
+                {adminMode ? <span className="user-pill-tag">ผู้ดูแล</span> : null}
+              </button>
               <button className="button-ghost" onClick={handleLogout}>
                 <LogoutIcon size={16} />
                 ออกจากระบบ

@@ -6,6 +6,7 @@ import Layout from "../components/Layout";
 import UpdateBanner from "../components/UpdateBanner";
 import ConsentDialog from "../components/ConsentDialog";
 import BrandLogo from "../components/BrandLogo";
+import Dashboard from "../components/Dashboard";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const session = getSession(context.req);
@@ -50,6 +51,10 @@ export default function Home({ loginname, hospitalName }: { loginname: string; h
           </Link>
           */}
         </div>
+
+        {/* วางไว้ใต้ปุ่ม เพราะปุ่มคือสิ่งที่เจ้าหน้าที่หน้างานมาใช้ทุกวัน
+            ส่วนตัวเลขสรุปเป็นของผู้บริหารที่แวะดูเป็นครั้งคราว */}
+        <Dashboard />
       </div>
     </Layout>
   );
