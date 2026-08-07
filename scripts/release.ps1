@@ -60,14 +60,19 @@ if ($Version -notmatch '^\d{10}$') {
   exit 1
 }
 
-$ZipName = "ndp-kit-$Version.zip"
-$ZipPath = Join-Path $Root $ZipName
-$PkgDir  = Join-Path $Root 'package'
+# Setup/ คือที่เก็บของที่พร้อมส่งออก ทั้งไฟล์ที่จะอัปขึ้น Drive และชุดติดตั้ง
+# อยู่นอก git (ดู .gitignore) เพราะเป็นผลลัพธ์ของ build ไม่ใช่ซอร์สโค้ด
+$SetupDir = Join-Path $Root 'Setup'
+$ZipName  = "ndp-kit-$Version.zip"
+$ZipPath  = Join-Path $SetupDir $ZipName
+$PkgDir   = Join-Path $Root 'package'
+
+New-Item -ItemType Directory -Path $SetupDir -Force | Out-Null
 
 Head "ปล่อยเวอร์ชัน $Version  ($(Format-VersionText $Version))"
 
 # ------------------------------------------------------------------ ตรวจก่อน
-Head 'ขั้นที่ 1/5 : ตรวจโค้ดก่อนปล่อย'
+Head 'ขั้นที่ 1/6 : ตรวจโค้ดก่อนปล่อย'
 
 Step 'ตรวจชนิดข้อมูล (tsc --noEmit) ...'
 & npx tsc --noEmit
@@ -77,7 +82,7 @@ Ok 'ตรวจชนิดข้อมูลผ่าน'
 Step 'จะตรวจแพ็กเกจอีกครั้งหลังประกอบเสร็จ ก่อนอัปขึ้น Drive'
 
 # ------------------------------------------------------------------- build
-Head 'ขั้นที่ 2/5 : build แบบ standalone'
+Head 'ขั้นที่ 2/6 : build แบบ standalone'
 
 $env:NEXT_OUTPUT = 'standalone'
 $env:NEXT_PUBLIC_APP_VERSION = $Version
@@ -86,7 +91,7 @@ if ($LASTEXITCODE -ne 0) { Err 'build ไม่ผ่าน - ยกเลิก
 Ok "build ผ่าน (ฝังเลขเวอร์ชัน $Version ลงในหน้าเว็บแล้ว)"
 
 # --------------------------------------------------------------- ประกอบแพ็กเกจ
-Head 'ขั้นที่ 3/5 : ประกอบแพ็กเกจ'
+Head 'ขั้นที่ 3/6 : ประกอบแพ็กเกจ'
 
 # Next standalone ไม่ก๊อป .next/static กับ public มาให้ ต้องประกอบเอง
 if (Test-Path $PkgDir) { Remove-Item -LiteralPath $PkgDir -Recurse -Force }
@@ -117,7 +122,7 @@ foreach ($s in @('data\dbconfig.json', 'data\dbconfig43.json', 'data\.session-se
 Ok 'ประกอบแพ็กเกจแล้ว ตรวจผ่าน'
 
 # ------------------------------------------------------------------ บีบอัด
-Head 'ขั้นที่ 4/5 : บีบอัดและตรวจไฟล์'
+Head 'ขั้นที่ 4/6 : บีบอัดและตรวจไฟล์'
 
 # บีบอัดด้วย adm-zip ผ่าน Node — ห้ามใช้ Compress-Archive หรือ
 # ZipFile::CreateFromDirectory เด็ดขาด (เหตุผลอยู่ในหัวไฟล์ scripts/pack.js)
@@ -141,8 +146,19 @@ if ($sizeMb -gt 24) {
   Warn "ไฟล์ใหญ่ $sizeMb MB ใกล้เพดาน 25 MB ของ Google Drive แล้ว - ดู RELEASE.md"
 }
 
+# ------------------------------------------------------------- ชุดติดตั้ง
+Head 'ขั้นที่ 5/6 : ประกอบชุดติดตั้ง'
+
+# ชุดติดตั้งสำหรับพาเครื่องที่ยังเป็นเวอร์ชันเก่าข้ามมา และเครื่องที่ไม่มีเน็ต
+# ก๊อปทั้งโฟลเดอร์ Setup ใส่ USB ไปได้เลย
+Copy-Item $ZipPath (Join-Path $SetupDir 'ndp-kit-offline.zip') -Force
+Copy-Item (Join-Path $Root 'install\ndp-kit-setup.bat') $SetupDir -Force
+Copy-Item (Join-Path $Root 'install\ndp-kit-setup.ps1') $SetupDir -Force
+
+Ok 'ประกอบชุดติดตั้งใน Setup\ แล้ว'
+
 # --------------------------------------------------------- ขั้นที่เหลือให้คนทำ
-Head 'ขั้นที่ 5/5 : เอาไฟล์ขึ้น Google Drive'
+Head 'ขั้นที่ 6/6 : เอาไฟล์ขึ้น Google Drive'
 
 Write-Host ''
 Warn 'ยังไม่ได้ปล่อยเวอร์ชัน จนกว่าไฟล์จะขึ้น Drive'
@@ -157,6 +173,7 @@ Step '  - รอให้ขึ้นครบ 100% ก่อนแจ้งห�
 Write-Host ''
 Step "เวลาที่สร้าง : $(Format-VersionText $Version)"
 Step "ขนาด         : $sizeMb MB"
+Step "ชุดติดตั้ง   : $SetupDir"
 Write-Host ''
 Step 'พออัปเสร็จ หน่วยบริการจะเห็นเมื่อกดปุ่มตรวจสอบเวอร์ชัน หรือเปิดโปรแกรมรอบถัดไป'
 Write-Host ''

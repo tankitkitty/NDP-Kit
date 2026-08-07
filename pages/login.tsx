@@ -130,7 +130,7 @@ export default function Login({ hospitalName }: { hospitalName: string }) {
           <Link href="/settings" className="login-link">
             ตั้งค่าการเชื่อมต่อฐานข้อมูล
           </Link>
-          {APP_VERSION ? <span className="login-version">{APP_VERSION}</span> : null}
+          {APP_VERSION ? <span className="login-version">Version {APP_VERSION}</span> : null}
         </div>
       </div>
 

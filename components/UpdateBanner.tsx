@@ -61,13 +61,12 @@ export default function UpdateBanner() {
         if (!res.ok) return;
         const data = await res.json();
         if (cancelled || !data.supported) return;
-        // แสดงการ์ดเมื่อมีเวอร์ชันใหม่ หรือเมื่อมีเวอร์ชันให้เลือกติดตั้งอยู่
-        // กรณีหลังจำเป็นเพราะเวลาที่ต้องถอยกลับไปเวอร์ชันก่อนหน้า คือตอนที่เครื่อง
-        // ติดตั้งตัวล่าสุดอยู่แล้วพอดี ถ้าซ่อนไว้จะไม่มีทางเข้าถึงได้เลย
-        if (data.hasUpdate || (data.versions && data.versions.length > 0)) {
-          setInfo(data);
-          setSelected(data.latest || "");
-        }
+        // ใช้เวอร์ชันล่าสุดอยู่แล้วก็ไม่ต้องแสดงอะไร ไม่งั้นหน้าแรกจะมีการ์ดที่กดแล้ว
+        // ไม่เกิดอะไรขึ้นค้างอยู่ทุกวัน — ถ้าต้องถอยกลับไปเวอร์ชันก่อนหน้า ใช้ตัวช่วย
+        // ติดตั้งเมนู 1 ซึ่งเลือกเวอร์ชันได้เหมือนกัน
+        if (!data.hasUpdate) return;
+        setInfo(data);
+        setSelected(data.latest || "");
       } catch {
         // ตรวจไม่ได้ก็ไม่ต้องแสดงอะไร แถบซ้ายเป็นคนรายงานความผิดพลาดให้แล้ว
       }
@@ -207,11 +206,7 @@ export default function UpdateBanner() {
     <div className="page-card" style={{ marginBottom: 20 }}>
       <div className="section-header">
         <h2 className="section-title" style={{ margin: 0 }}>
-          {running
-            ? "กำลังอัปเดตโปรแกรม"
-            : info.hasUpdate
-              ? "มีเวอร์ชันใหม่ให้อัปเดต"
-              : "ติดตั้งเวอร์ชันอื่น"}
+          {running ? "กำลังอัปเดตโปรแกรม" : "มีเวอร์ชันใหม่ให้อัปเดต"}
         </h2>
         <span className="status-pill status-pending">{formatVersion(info.latest || "")}</span>
       </div>

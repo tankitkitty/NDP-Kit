@@ -16,7 +16,7 @@ import {
 } from "./NavIcons";
 
 /**
- * เลขเวอร์ชันถูกฝังตอน build โดย .github/workflows/release.yml (ค่าจาก git tag)
+ * เลขเวอร์ชันถูกฝังตอน build โดย scripts/release.ps1
  *
  * ใช้วิธีนี้แทนการอ่านไฟล์ version.txt ตอนรัน เพราะ Layout อยู่ฝั่งเบราว์เซอร์
  * ถ้าจะอ่านไฟล์ต้องส่ง prop ผ่านทุกหน้า หรือยิง API เพิ่มทุกครั้งที่เปลี่ยนหน้า
@@ -117,7 +117,7 @@ export default function Layout({ title, loginname, hospitalName, fullWidth, chil
             ชื่อโปรแกรมอยู่ในรูปแล้วจึงไม่เขียนซ้ำ */}
         <div className="sidebar-brand">
           <BrandLogo variant="dark" width={200} />
-          {APP_VERSION ? <span className="sidebar-brand-version">{APP_VERSION}</span> : null}
+          {APP_VERSION ? <span className="sidebar-brand-version">Version {APP_VERSION}</span> : null}
         </div>
         {loginname ? (
           <nav className="sidebar-nav">
